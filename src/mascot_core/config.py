@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     provider: str = "auto"  # auto：先 legacy 旧契约再 wsl 新契约，见 providers/auto.py
     provider_base_url: str = "http://127.0.0.1:8890"
     provider_timeout_s: float = Field(default=2.0, gt=0.1)
+    # health 是启动路径上的串行探测（auto 连探两次），比业务超时更短才不至于拖慢降级
+    health_timeout_s: float = Field(default=0.8, gt=0.05, le=10.0)
     allow_offline: bool = True
 
     # 日志

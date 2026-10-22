@@ -31,24 +31,34 @@ USER_PREFIXES = ("主人:", "主人：")
 class LegacyProvider:
     name = "legacy"
 
-    def __init__(self, base_url: str, timeout_s: float = 2.0, send_timeout_s: float = 180.0) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        timeout_s: float = 2.0,
+        send_timeout_s: float = 180.0,
+        health_timeout_s: float | None = None,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_s = timeout_s
         self.send_timeout_s = send_timeout_s
+        # health 在启动路径上串行探测（auto 要连探两次），单独用更短超时。
+        self.health_timeout_s = health_timeout_s if health_timeout_s is not None else timeout_s
         self._session_id = ""
         self._last_error = ""
 
     # ---- HTTP 基础 -------------------------------------------------------
 
-    def _get(self, path: str) -> Any:
+    def _get(self, path: str, timeout: float | None = None) -> Any:
         req = urllib.request.Request(f"{self.base_url}{path}", headers={"Accept": "application/json"})
-        with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:  # noqa: S310 - 本机回环
+        with urllib.request.urlopen(  # noqa: S310 - 本机回环
+            req, timeout=self.timeout_s if timeout is None else timeout
+        ) as resp:
             return json.loads(resp.read().decode("utf-8"))
 
     def health(self) -> ProviderHealth:
         started = time.monotonic()
         try:
-            raw = self._get("/api/pet/status")
+            raw = self._get("/api/pet/status", timeout=self.health_timeout_s)
             ms = int((time.monotonic() - started) * 1000)
         except urllib.error.URLError as exc:
             self._last_error = str(getattr(exc, "reason", exc))

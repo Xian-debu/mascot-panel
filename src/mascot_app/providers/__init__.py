@@ -19,11 +19,13 @@ def make_provider(settings: Settings) -> ChatProvider:
         return LegacyProvider(
             base_url=settings.provider_base_url,
             timeout_s=settings.provider_timeout_s,
+            health_timeout_s=settings.health_timeout_s,
         )
     if name in ("auto", "wsl"):
         builder = AutoProvider if name == "auto" else WslProvider
         return builder(
             base_url=settings.provider_base_url,
             timeout_s=settings.provider_timeout_s,
+            health_timeout_s=settings.health_timeout_s,
         )
     return NullProvider()

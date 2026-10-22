@@ -20,21 +20,29 @@ from mascot_core.contract import HealthState, Message, ProviderHealth
 class WslProvider:
     name = "wsl"
 
-    def __init__(self, base_url: str, timeout_s: float = 2.0) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        timeout_s: float = 2.0,
+        health_timeout_s: float | None = None,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_s = timeout_s
+        self.health_timeout_s = health_timeout_s if health_timeout_s is not None else timeout_s
         self._last_error = ""
 
-    def _get(self, path: str) -> object:
+    def _get(self, path: str, timeout: float | None = None) -> object:
         url = f"{self.base_url}{path}"
         req = urllib.request.Request(url, headers={"Accept": "application/json"})
-        with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:  # noqa: S310 - 本机回环
+        with urllib.request.urlopen(  # noqa: S310 - 本机回环
+            req, timeout=self.timeout_s if timeout is None else timeout
+        ) as resp:
             return json.loads(resp.read().decode("utf-8"))
 
     def health(self) -> ProviderHealth:
         started = time.monotonic()
         try:
-            self._get("/api/pet/health")
+            self._get("/api/pet/health", timeout=self.health_timeout_s)
             ms = int((time.monotonic() - started) * 1000)
             return ProviderHealth(state=HealthState.UP, latency_ms=ms)
         except urllib.error.URLError as exc:

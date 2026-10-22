@@ -22,9 +22,14 @@ from mascot_core.contract import HealthState, Message, ProviderHealth
 class AutoProvider:
     name = "auto"
 
-    def __init__(self, base_url: str, timeout_s: float = 2.0) -> None:
-        self._legacy = LegacyProvider(base_url, timeout_s=timeout_s)
-        self._wsl = WslProvider(base_url, timeout_s=timeout_s)
+    def __init__(
+        self,
+        base_url: str,
+        timeout_s: float = 2.0,
+        health_timeout_s: float | None = None,
+    ) -> None:
+        self._legacy = LegacyProvider(base_url, timeout_s=timeout_s, health_timeout_s=health_timeout_s)
+        self._wsl = WslProvider(base_url, timeout_s=timeout_s, health_timeout_s=health_timeout_s)
         self._active: LegacyProvider | WslProvider = self._legacy
 
     def health(self) -> ProviderHealth:

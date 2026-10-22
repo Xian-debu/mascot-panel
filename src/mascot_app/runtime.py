@@ -323,6 +323,7 @@ class Runtime:
                 "settings": {
                     "fps": self.settings.fps,
                     "history_limit": self.settings.history_limit,
+                    "health_timeout_s": self.settings.health_timeout_s,
                     "poll_interval_ms": self.settings.poll_interval_ms,
                     "orbit_speed": self.settings.orbit_speed,
                 },

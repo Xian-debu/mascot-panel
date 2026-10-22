@@ -1,6 +1,6 @@
 # 进度报告（自动维护，供明早阅读）
 
-## 明早先读：2026-10-22 夜间交付总结（更新至 M20）
+## 明早先读：2026-10-22 夜间交付总结（更新至 M21）
 
 **做完了什么**：按 docs/10-plan.md 推进 M0→M13，产品仓库 /root/mascot
 （骨架 → 纯逻辑层 → CLI/provider → CI/进度 → 部署 → M1 平台 spike → M2 运行时 → M3 渲染 →
@@ -8,8 +8,8 @@ M4 面板与聊天 → M5 打包交付 → M6a/b/c 视觉对齐（像素时钟�
 M8 冷启动 → M9 免打扰与多屏定位 → M10 接上旧聊天后端 → M11 流式增量与停止生成 →
 M12 配置写回与开关持久化 → M13 待机形态 → M14 待机球像素时钟化/可拖动/记忆位置 →
 M15 聊天记录跨重启保留与清空 → M16 待机球右键菜单/边缘吸附/回到右下角 →
-M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真回滚 → M19 配置热重载 → M20 历史条数可配置）。
-管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023、M18 的 SG-0024、M19 的 SG-0025、M20 的 SG-0026 见当天提交）。
+M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真回滚 → M19 配置热重载 → M20 历史条数可配置 → M21 health 独立短超时）。
+管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023、M18 的 SG-0024、M19 的 SG-0025、M20 的 SG-0026、M21 的 SG-0027 见当天提交）。
 
 **现在能做什么**（Windows 上已装好）：
 ```
@@ -26,7 +26,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 **验证过的硬事实**：
 - Linux：ruff 0 / pyright 0 / pytest 全绿；Windows：全量回归通过；M10 验收 9/9、M11 验收 15/15、
   M12 验收 16/16、M13 验收 10/10、M14 验收 9/9、M15 验收 14/14、M16 验收 7/7、
-  M17 验收 12/12、M18 验收 15/15、M19 验收 17/17、M20 验收 16/16 PASS。
+  M17 验收 12/12、M18 验收 15/15、M19 验收 17/17、M20 验收 16/16、M21 验收 15/15 PASS。
 - 真机跟随 TX-Pet 窗口（961,459 / 1616,272，随窗口移动）、面板与环绕球同进程共存、ctl 全动作可用、
   托盘菜单与双击互切可用、安装/卸载/回滚/双跑/自启逐个跑过（evidence/m5-*、m6*、m7-*、m8-*、m9 验收输出）。
 - 冷启动 **进程创建→面板可见 0.70 s**（安装版 0.71–0.87 s），此前 4.34 s；DoD ≤2 s 已达成（docs/24）。
@@ -319,7 +319,7 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 重构：后端 I/O 全部移出工作线程，新增 `mascot-history` / `mascot-sender` / `mascot-provider` 三个 daemon 线程；
   工作线程只做状态机、跟随、渲染、消息泵。
 - 结果（frozen onedir，3 轮）：spawn→面板可见 **703/705/701 ms**（安装版 868/706/713 ms），此前 4.34 s；
-  DoD ≤2 s 达成。降级横幅仍约 2.1s 出现（health 超时在独立线程）。
+  DoD ≤2 s 达成。降级横幅当时约 2.1s 出现（health 超时在独立线程；M21 已把无后端降级压到 1.9s）。
 - 回归：Linux ruff 0 / pyright 0 / pytest 全绿；Windows `verify_m4.py` 9 项 PASS、`verify_m7.py` 12 项全过；
   安装版无参启动截图 `evidence/m8-installed.png`。细节见 `docs/24-m8-startup.md`。
 
@@ -527,4 +527,19 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 坑：只裁盘不裁内存会「假达标」——放宽上限后旧消息复活（grow_keeps_more 一开始就挂了）；
   热重载裁完必须重新落盘。细节见 `docs/36-m20-history-limit.md`。
 - 遗留：上限只管条数不管单条长度（MAX_TEXT=4000）；调大不会回填已裁消息；clear-history 仍只清本地。
+- 交付：build-win.sh + install-win.sh 跑完，安装版 doctor/versions 正常。
+
+### M21 health 探测独立短超时（2026-10-22 夜）
+
+- 痛点：M8 遗留「降级横幅延迟」；实测无后端时 **4.29s** 才出降级（`boot.state_degraded=4235ms`），
+  因为 `AutoProvider.health()` 串行探两次，都用业务超时 `provider_timeout_s=2.0`。
+- `mascot_core/config.py`：新增 `health_timeout_s: float = Field(default=0.8, gt=0.05, le=10.0)`（冷字段）。
+- providers：`LegacyProvider`/`WslProvider` 增加 `health_timeout_s`（缺省回落业务超时）；
+  `_get(path, timeout=None)` 允许逐次覆盖；`health()` 用短超时，`history/send` 用业务超时；
+  `AutoProvider` 透传，`make_provider()` 从 settings 取值；snapshot.settings 暴露 `health_timeout_s`。
+- 验收 `scripts/verify_m21.py` 15/15 PASS：无后端 1.91s 降级（阈值 <3.0s）、
+  假 legacy 后端 0.27s 判健康且不降级、legacy 成功后不再探 wsl、ctl stop/exit 0；回归 M13–M20 全 exit 0。
+- 坑：venv 的 python.exe 是转发器（Popen pid ≠ 桌宠 pid，验收要用 `sys._base_executable`+PYTHONPATH）；
+  `ctl stop --provider-url` 会 argparse 失败。细节见 `docs/37-m21-health-timeout.md`。
+- 遗留：`health_timeout_s` 是冷字段（改完要重启）；超时是 socket 级，不分 connect/read。
 - 交付：build-win.sh + install-win.sh 跑完，安装版 doctor/versions 正常。
