@@ -1,6 +1,6 @@
 # 进度报告（自动维护，供明早阅读）
 
-## 明早先读：2026-10-22 夜间交付总结（更新至 M25）
+## 明早先读：2026-10-22 夜间交付总结（更新至 M26）
 
 **做完了什么**：按 docs/10-plan.md 推进 M0→M13，产品仓库 /root/mascot
 （骨架 → 纯逻辑层 → CLI/provider → CI/进度 → 部署 → M1 平台 spike → M2 运行时 → M3 渲染 →
@@ -8,8 +8,8 @@ M4 面板与聊天 → M5 打包交付 → M6a/b/c 视觉对齐（像素时钟�
 M8 冷启动 → M9 免打扰与多屏定位 → M10 接上旧聊天后端 → M11 流式增量与停止生成 →
 M12 配置写回与开关持久化 → M13 待机形态 → M14 待机球像素时钟化/可拖动/记忆位置 →
 M15 聊天记录跨重启保留与清空 → M16 待机球右键菜单/边缘吸附/回到右下角 →
-M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真回滚 → M19 配置热重载 → M20 历史条数可配置 → M21 health 独立短超时 → M22 clear-history 对后端 history 也生效 → M23 就地升级命令 update → M24 面板可拖动与位置记忆 → M25 待机球单击/双击手势）。
-管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023、M18 的 SG-0024、M19 的 SG-0025、M20 的 SG-0026、M21 的 SG-0027、M22 的 SG-0028、M23 的 SG-0029、M24 的 SG-0030、M25 的 SG-0031 见当天提交）。
+M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真回滚 → M19 配置热重载 → M20 历史条数可配置 → M21 health 独立短超时 → M22 clear-history 对后端 history 也生效 → M23 就地升级命令 update → M24 面板可拖动与位置记忆 → M25 待机球单击/双击手势 → M26 启动时面板窗口真隐藏）。
+管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023、M18 的 SG-0024、M19 的 SG-0025、M20 的 SG-0026、M21 的 SG-0027、M22 的 SG-0028、M23 的 SG-0029、M24 的 SG-0030、M25 的 SG-0031、M26 的 SG-0032 见当天提交）。
 
 **现在能做什么**（Windows 上已装好）：
 ```
@@ -27,7 +27,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 **验证过的硬事实**：
 - Linux：ruff 0 / pyright 0 / pytest 全绿；Windows：全量回归通过；M10 验收 9/9、M11 验收 15/15、
   M12 验收 16/16、M13 验收 10/10、M14 验收 9/9、M15 验收 14/14、M16 验收 7/7、
-  M17 验收 12/12、M18 验收 15/15、M19 验收 17/17、M20 验收 16/16、M21 验收 15/15、M22 验收 14/14、M23 验收 26/26、M24 验收 10/10、M25 验收 11/11 PASS。
+  M17 验收 12/12、M18 验收 15/15、M19 验收 17/17、M20 验收 16/16、M21 验收 15/15、M22 验收 14/14、M23 验收 26/26、M24 验收 10/10、M25 验收 11/11、M26 验收 7/7 PASS。
 - 真机跟随 TX-Pet 窗口（961,459 / 1616,272，随窗口移动）、面板与环绕球同进程共存、ctl 全动作可用、
   托盘菜单与双击互切可用、安装/卸载/回滚/双跑/自启逐个跑过（evidence/m5-*、m6*、m7-*、m8-*、m9 验收输出）。
 - 冷启动 **进程创建→面板可见 0.70 s**（安装版 0.71–0.87 s），此前 4.34 s；DoD ≤2 s 已达成（docs/24）。
@@ -47,7 +47,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 
 **已知缺口**：未签名（SmartScreen 可能提示）、无网络自动更新（M23 只支持本地目录/zip 升级）、
 旧后端未用真实 API Key 实测、待机球单击开面板有 350ms 双击窗口延迟、
-面板拖动后是绝对钉住（不跟随宠物、换分辨率不按比例迁移）。
+面板拖动后是绝对钉住（不跟随宠物、换分辨率不按比例迁移）、启动时若 WebView2 再 Show 面板需 0.3s 节流纠正。
 
 **仓库位置**：
 - 产品：/root/mascot（git；README 有结构与命令）
@@ -587,3 +587,13 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 坑：双击不是一条独立消息，每次点击都要喂 ClickGate；拖动前不 reset 会在松手 350ms 后弹面板；pywebview 的 hidden=True 并没有真的藏窗口（启动时 ws_visible=true），验收不能用 IsWindowVisible 判「面板没打开」。
 - 遗留：单击开面板多 350ms 延迟（窗口常量，未做成配置）；轨道球无双击手势；启动时那个 WS_VISIBLE 但画不出内容的面板窗口是否拦点击未验证（留 M26）。
 - 交付：docs/41-m25-ball-double-click.md；build-win.sh + install-win.sh 已跑，安装版 mascot.exe 8021164 字节（23:28），current.txt=0.1.0，安装版 doctor ok（provider 项 false 属预期）。
+
+### M26 启动时面板窗口真隐藏（2026-10-22 夜）
+
+- 痛点：M25 验收时探针发现——无宠物启动 6s 后 `mascot-panel` 的 hwnd 存在、`WS_VISIBLE` 为真、rect 2048,942 488×634，只是画不出内容。`create_window(hidden=True)` 并没有真藏住。
+- 根因：pywebview 6.2.1 的 hidden 分支是 `Opacity=0 → Show → Hide → Opacity=1`（WebView2 必须先 Show 才初始化），但 WebView2 导航完成后内部还会再 Show 一次。
+- 改法两层（`src/mascot_app/runtime.py`）：① `_on_gui_start()` 里若状态机是 `State.IDLE` 就 `win32.show_window(hwnd, False)` 并打 boot 标记 `panel_hidden_at_start`；② 主循环每轮 `_enforce_panel_hidden(now)`（0.3s 节流）在 IDLE 且 `is_visible` 时再藏一次，防 pywebview 后续又 Show。
+- 关键坑：判定「该藏」必须用状态机状态，而不是自维护的 `_panel_shown` 布尔——第一版用标志时撞上「状态先记、副作用后跑」的竞态：`state_idle_open:625` 早于 `panel_hidden_at_start:687`，把刚要求显示的面板藏了。改读 `machine.state is State.IDLE` 后消失。
+- 验收 `scripts/verify_m26.py` 7 项全 true：`panel_hidden_at_start`（`WS_VISIBLE`=0、`IsWindowVisible`=false）、`panel_ws_visible`=false、`panel_not_blocking_clicks`（`WindowFromPoint(面板中心)` 返回别的窗口）、`stays_hidden`（再等 2s 仍隐藏）、点球 → `idle_open` 且 `panel_shown_ws_visible`=true、`ctl to-ball` → `panel_hidden_again`=true、exit 0。回归 M13/M14/M15/M16/M24/M25 全 exit 0。
+- 遗留：面板在 IDLE_OPEN 时仍 topmost（跟随宠物压在上方属设计）；`WS_EX_TOOLWINDOW` 只在首次拿 hwnd 时设（无重建场景）；透明 hack 分支未验证。
+- 交付：docs/42-m26-panel-hidden.md；build-win.sh + install-win.sh 已跑，安装版 mascot.exe 8021744 字节（23:34），current.txt=0.1.0，安装版 doctor ok。

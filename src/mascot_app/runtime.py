@@ -326,6 +326,10 @@ class Runtime:
 
         self._panel: Any = None
         self._panel_hwnd = 0
+        # 状态机是否要求面板可见；pywebview 的 hidden=True 并不保证启动后真的隐藏窗口
+        # （实测启动 6s 时 WS_VISIBLE 仍为真），所以 GUI 线程起来后再按这个标志兜一次。
+        self._panel_shown = False
+        self._panel_recheck = 0.0
         self._ball: Any = None
         self._pet: PetView | None = None
         self._last_panel_rect: Rect | None = None
@@ -550,6 +554,7 @@ class Runtime:
         from mascot_win import win32
 
         if effect in (SHOW_PANEL, HIDE_PANEL):
+            self._panel_shown = effect == SHOW_PANEL
             hwnd = self._ensure_panel_hwnd()
             if hwnd:
                 if effect == SHOW_PANEL:
@@ -692,6 +697,19 @@ class Runtime:
             self._panel_hwnd = hwnd
             boot.mark("panel_hwnd")
         return hwnd
+
+    def _enforce_panel_hidden(self, now: float) -> None:
+        """状态机不要面板时，每秒最多纠正一次「窗口又被显示出来」。"""
+        from mascot_win import win32
+
+        if self._machine.state is not State.IDLE or not self._panel_hwnd:
+            return
+        if now - self._panel_recheck < 0.3:
+            return
+        self._panel_recheck = now
+        if win32.is_visible(self._panel_hwnd):
+            with contextlib.suppress(Exception):
+                win32.show_window(self._panel_hwnd, False)
 
     def _hide_panel(self) -> None:
         from mascot_win import win32
@@ -971,6 +989,10 @@ class Runtime:
                 # 待机球的单击要等双击窗口过去才确认（见 click.py）
                 if self._click_gate.tick(now * 1000.0) == SINGLE:
                     self.post(Event.CLICK_BALL)
+
+                # 面板窗口在状态机不需要它时必须真的不可见：pywebview 的 hidden=True
+                # 只是 Opacity=0 + Show + Hide，WebView2 建好之后还会再 Show 一次。
+                self._enforce_panel_hidden(now)
 
                 # 配置文件每秒查一次：改了热重载（否则用户得重启才看到 fps 变化）
                 if now - last_config_check >= 1.0:
@@ -1252,6 +1274,17 @@ class Runtime:
 
     def _on_gui_start(self) -> None:
         boot.mark("webview_started")
+        # 兜底：pywebview 的 hidden=True 走的是 Opacity=0 + Show + Hide，WebView2 建好
+        # 之后窗口可能又被显示出来（启动探针实测 WS_VISIBLE 为真、覆盖 228,228 488×634）。
+        # 状态机此刻不要面板，就显式再藏一次；要面板（宠物在）则不动。
+        if self._machine.state is State.IDLE:
+            hwnd = self._ensure_panel_hwnd()
+            if hwnd:
+                from mascot_win import win32
+
+                with contextlib.suppress(Exception):
+                    win32.show_window(hwnd, False)
+                boot.mark("panel_hidden_at_start")
 
     def _demo_script(self) -> None:
         """自动化验收用：2s 收进小球，6s 回到面板。"""
