@@ -1,0 +1,11 @@
+/* 输入区：1-4 行自适应、草稿、IME 保护、Enter/Shift+Enter。 */
+.composer{display:flex;align-items:flex-end;gap:var(--s2);padding:var(--s2) var(--s3);
+  border-top:1px solid var(--border);}
+.composer textarea{flex:1;resize:none;font:inherit;font-size:var(--fs-13);color:var(--text);
+  background:var(--card);border:1px solid var(--border);border-radius:var(--r-card);
+  padding:6px 10px;max-height:calc(var(--fs-13) * 1.5 * 4 + 12px);min-height:34px;
+  outline:none;transition:border-color var(--fast);}
+.composer textarea:focus{border-color:var(--accent-line);}
+.composer textarea::placeholder{color:var(--text-muted);}
+.composer textarea{scrollbar-width:none;}
+.composer textarea::-webkit-scrollbar{display:none;}

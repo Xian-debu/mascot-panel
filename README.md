@@ -4,7 +4,7 @@
 旧实现 `E:\TX-Pet`（483 行单文件壳 + 919 行单文件 SPA，无版本控制）**冻结保留**，本仓库与其零共享代码。
 
 > 规划与决策记录在 `/root/mascot-admin`（管理仓库）。本仓库只承载产品代码。
-> 当前阶段：**M3 完成**（渲染迁移与快照基线），下一步 M4（面板拆分 + 聊天流 + 降级 UI）。
+> 当前阶段：**M4 完成**（面板拆分 + 真聊天流 + 降级 UI），下一步 M5（打包分发 + 开机自启 + 双跑回滚）。
 
 ## 它是什么
 
@@ -26,7 +26,7 @@ src/mascot_render/  渲染（PIL 画球/状态灯 + 快照画廊）
 src/mascot_app/     组装与 CLI（run / doctor / ctl），web/panel.html 面板前端
 tests/unit/         纯逻辑单测         tests/snapshot/  像素基线
 tests/platform/     Win32 平台测试     tests/contract/  provider 契约
-scripts/            deploy-win.sh（发布到 Windows 开发副本）、verify_m2.py、make_baselines.py
+scripts/            deploy-win.sh（发布 Windows 开发副本）、verify_m2.py/verify_m4.py、dev-chat-backend.py、make_baselines.py
 ```
 
 ## 快速开始

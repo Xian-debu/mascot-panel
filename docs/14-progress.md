@@ -141,3 +141,35 @@ Windows: pytest tests/snapshot -q -> 9 passed（Pillow 13.0.0）
 - 字号/间距 token 已进 CSS，但 JS 未消费（M4 拆面板时统一）。
 - 球仍是实时相位渲染，没有离散像素帧（P2）。
 - 面板整体外观仍靠人眼验收（M5 打包后可做固定尺寸快照）。
+
+## M4 面板拆分与真聊天流 — 完成（2026-10-22 深夜）
+
+**做了什么**
+- 面板从 919 行单文件拆成 `panel.html` + 4 个 CSS + 5 个 JS（`web/css/*`、`web/js/*`），
+  `load_panel_html()` 按顺序拼接并替换三个占位符，运行时仍是自包含单文件（不改 pywebview 加载方式）。
+- 真聊天链路：`snapshot()` 带 `messages/sending/provider_detail`；`pywebview.api.send()` 只入队，
+  worker 线程 `_drain_sends()` 才真正调 provider；`mascot ctl send --text` 走 `control.json`。
+- 消息渲染：相邻同角色合并、今天/昨天/日期分桶、markdown-lite（围栏代码块 + 行内 code + 复制）、
+  超 12 行折叠、仅在贴近底部时自动滚动；全程 `textContent`，不碰 `innerHTML`。
+- 输入框：1–4 行自适应、localStorage 草稿、IME composition 守卫、Enter 发送 / Shift+Enter 换行、
+  发送中禁用；用户气泡乐观回显（同文本判重）。
+- 降级矩阵落地：探测失败→红点+横幅；发送失败→保留用户消息 + `PROVIDER_DOWN` 事件；
+  历史失败→不降级只记 `provider_detail`；`--provider null` 不降级（刻意离线）。
+- `scripts/dev-chat-backend.py`（假后端，仅开发用）+ `scripts/verify_m4.py`（9 项真机验收）。
+
+**怎么验证**
+```
+Linux:   ruff 0 / pyright 0 / pytest 58 passed
+Windows: venv\Scripts\python.exe app/0.1.0/scripts/verify_m4.py --provider-url http://127.0.0.1:8891
+         -> 9/9 PASS（跟随、历史、发送、回执、sending 复位、未降级、stop、进程退出）
+真机:    evidence/m4-chat.png（历史+两轮问答，时间分桶/左右气泡/单行输入框）
+```
+
+**提交**：见 git log（web 拆分 + runtime/cli + tests/contract + docs/18）
+
+**已知缺口**
+- 无流式输出（需要新增 Python→JS push 通道，M5 之后按需做）。
+- 消息不本地持久化，重启依赖 `provider.history()`。
+- 折叠阈值固定 12 行，未按面板高度自适应。
+- 键盘焦点管理缺 `Esc` 收球、`↑` 编辑上一条。
+

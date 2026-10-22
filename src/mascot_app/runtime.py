@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from mascot_core.config import Settings
-from mascot_core.contract import ChatProvider
+from mascot_core.contract import ChatProvider, Message
 from mascot_core.geometry import Rect, Screen, angle_for_time, ball_pos, follow_rect
 from mascot_core.state import (
     CLEAR_DEGRADED,
@@ -51,12 +51,30 @@ def _state_dir() -> Path:
 
 
 TOKENS_PLACEHOLDER = "/*__TOKENS__*/"
+CSS_PLACEHOLDER = "/*__CSS__*/"
+JS_PLACEHOLDER = "//__JS__"
+CSS_MODULES = ("base.css", "stream.css", "composer.css", "states.css")
+JS_MODULES = ("state.js", "ui.js", "chat.js", "composer.js", "main.js")
+MESSAGE_LIMIT = 50
+
+
+def _pkg_text(rel: str) -> str:
+    return resources.files("mascot_app").joinpath(rel).read_text(encoding="utf-8")
 
 
 def load_panel_html() -> str:
-    """读面板 HTML，并把设计 token 注入 :root（HTML 里不写死颜色）。"""
-    html = resources.files("mascot_app").joinpath("web/panel.html").read_text(encoding="utf-8")
-    return html.replace(TOKENS_PLACEHOLDER, css_variables())
+    """把面板外壳、CSS 模块、JS 模块与设计 token 合成一张自包含 HTML。
+
+    面板拆成多文件开发（好读好改），运行时合成单文件给 WebView（不依赖本地路径）。
+    """
+    html = _pkg_text("web/panel.html")
+    css = "\n".join(_pkg_text(f"web/css/{name}") for name in CSS_MODULES)
+    js = "\n".join(_pkg_text(f"web/js/{name}") for name in JS_MODULES)
+    return (
+        html.replace(TOKENS_PLACEHOLDER, css_variables())
+        .replace(CSS_PLACEHOLDER, css)
+        .replace(JS_PLACEHOLDER, js)
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,9 +109,12 @@ class JsApi:
     def to_ball(self) -> dict[str, Any]:
         return self._rt.to_ball()
 
-    def show_panel(self) -> dict[str, Any]:
+    def to_panel(self) -> dict[str, Any]:
         self._rt.post(Event.CLICK_BALL)
         return {"ok": True}
+
+    def send(self, text: str) -> dict[str, Any]:
+        return self._rt.send_text(text)
 
 
 class Runtime:
@@ -126,6 +147,10 @@ class Runtime:
         self._reason = "START"
         self._degraded = False
         self._error: str = ""
+        self._provider_detail: str = ""
+        self._messages: list[Message] = []
+        self._sending = False
+        self._send_queue: list[str] = []
 
     # ---- 状态读取（JS 轮询） -------------------------------------------------
 
@@ -141,6 +166,9 @@ class Runtime:
                 "pet": pet.to_dict() if pet else None,
                 "uptime_s": round(time.monotonic() - self._started, 1),
                 "error": self._error,
+                "provider_detail": self._provider_detail,
+                "sending": self._sending,
+                "messages": [m.to_dict() for m in self._messages[-MESSAGE_LIMIT:]],
             }
 
     # ---- 事件投递 -----------------------------------------------------------
@@ -154,12 +182,55 @@ class Runtime:
         self.post(Event.CLICK_CLOCK)
         return {"ok": True}
 
+    # ---- 聊天 ---------------------------------------------------------------
+
+    def send_text(self, text: str) -> dict[str, Any]:
+        """JS 发来的消息只入队：真正的网络调用在工作线程里做，别卡住 UI。"""
+        clean = (text or "").strip()
+        if not clean:
+            return {"ok": False, "reason": "EMPTY_TEXT"}
+        with self._lock:
+            self._send_queue.append(clean[:4000])
+        return {"ok": True, "queued": True}
+
+    def _load_history(self) -> None:
+        try:
+            history = self.provider.history(limit=MESSAGE_LIMIT)
+        except Exception as exc:  # provider 是外部世界，绝不假设它守规矩
+            self._provider_detail = str(exc)
+            return
+        with self._lock:
+            self._messages = list(history)
+
+    def _drain_sends(self) -> None:
+        with self._lock:
+            queue, self._send_queue = self._send_queue, []
+        for text in queue:
+            with self._lock:
+                self._messages.append(
+                    Message(role="user", text=text, ts=time.time(), msg_id=f"local-{len(self._messages)}")
+                )
+                self._sending = True
+            try:
+                reply = self.provider.send(text)
+                if reply.role == "assistant" and reply.text:
+                    with self._lock:
+                        self._messages.append(reply)
+                self._error = ""
+                self._provider_detail = ""
+            except Exception as exc:
+                self._error = str(exc)
+                self._provider_detail = str(exc)
+                self.post(Event.PROVIDER_DOWN)
+            finally:
+                with self._lock:
+                    self._sending = False
+
     # ---- 副作用 -------------------------------------------------------------
 
     def _apply(self, tr: Transition) -> None:
         with self._lock:
             self._reason = tr.reason
-        self._write_state()
         log.info("state", extra={"state": tr.state.value, "detail": tr.reason})
         for effect in tr.effects:
             try:
@@ -167,6 +238,8 @@ class Runtime:
             except Exception as exc:  # noqa: BLE001 - 单个副作用失败不该拖垮循环
                 self._error = f"{effect}: {exc}"
                 log.warning("effect_failed", extra={"event": effect, "detail": str(exc)})
+        # 副作用先落地再落盘：否则 state.json 会短暂记录"已降级但 degraded=false"这种自相矛盾状态
+        self._write_state()
 
     def _effect(self, effect: str) -> None:
         from mascot_win import win32
@@ -197,7 +270,7 @@ class Runtime:
             self._frames = False
             return
         if effect in (MARK_DEGRADED, CLEAR_DEGRADED):
-            self._degraded = effect is MARK_DEGRADED
+            self._degraded = effect == MARK_DEGRADED
             return
 
     def _write_state(self) -> None:
@@ -224,7 +297,10 @@ class Runtime:
             cmd = str(json.loads(raw).get("cmd", ""))
         except (ValueError, AttributeError):
             return
-        if cmd == "to_ball":
+        if cmd == "send":
+            with contextlib.suppress(ValueError, AttributeError):
+                self.send_text(str(json.loads(raw).get("text", "")))
+        elif cmd == "to_ball":
             self.post(Event.CLICK_CLOCK)
         elif cmd == "to_panel":
             self.post(Event.CLICK_BALL)
@@ -306,17 +382,24 @@ class Runtime:
             on_click=lambda: self.post(Event.CLICK_BALL),
         )
 
+        self._load_history()
+        # 上一次异常退出可能留下 control.json：启动时先清掉，避免"幽灵消息"
+        with contextlib.suppress(OSError):
+            (_state_dir() / "control.json").unlink()
+
         interval = self.settings.poll_interval_ms / 1000.0
         frame_s = 1.0 / self.settings.fps
         next_poll = 0.0
         next_frame = 0.0
         last_provider_check = 0.0
+        last_state_write = 0.0
 
         try:
             while not self._stop.is_set():
                 now = time.monotonic()
                 self._ball.pump()
                 self._drain_events()
+                self._drain_sends()
 
                 if now >= next_poll:
                     next_poll = now + interval
@@ -332,6 +415,11 @@ class Runtime:
                 if now - last_provider_check >= 5.0:
                     last_provider_check = now
                     self._poll_provider()
+
+                # 状态文件每秒刷新：ctl status / 验收脚本才能看到 uptime、消息与 sending
+                if now - last_state_write >= 1.0:
+                    last_state_write = now
+                    self._write_state()
 
                 time.sleep(0.005)
         finally:
@@ -369,8 +457,10 @@ class Runtime:
         if not self.settings.allow_offline:
             health = self.provider.health()
             if not health.ok:
+                self._provider_detail = health.detail or health.reason_code
                 self.post(Event.PROVIDER_DOWN)
             else:
+                self._provider_detail = ""
                 self.post(Event.PROVIDER_READY)
 
     # ---- 入口 ---------------------------------------------------------------

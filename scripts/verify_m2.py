@@ -62,6 +62,9 @@ def find_ball() -> int:
 
 
 def main() -> int:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     checks: list[dict] = []
     win32.enable_dpi_awareness()
     proc = subprocess.Popen(

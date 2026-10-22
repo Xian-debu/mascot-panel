@@ -1,0 +1,9 @@
+/* 状态灯与动效（对应 docs/12 的 agent 状态灯）。 */
+.dot.working{animation:pulse 1.6s ease-in-out infinite;}
+.dot.awaiting{background:var(--amber);box-shadow:0 0 8px var(--amber);
+  animation:slow 2.4s ease-in-out infinite;}
+.dot.error{background:var(--red);box-shadow:0 0 8px var(--red);}
+.dot.idle{animation:breathe 4s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
+@keyframes slow{0%,100%{opacity:.5}50%{opacity:1}}
+@keyframes breathe{0%,100%{opacity:.55}50%{opacity:.9}}

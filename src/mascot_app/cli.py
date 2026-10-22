@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib.util
 import json
 import os
@@ -133,6 +134,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         settings.provider = args.provider
     if args.allow_offline is not None:
         settings.allow_offline = args.allow_offline
+    if args.provider_url:
+        settings.provider_base_url = args.provider_url
     setup_logging(settings.log_dir, settings.log_level)
 
     try:
@@ -202,7 +205,7 @@ def _read_state_json() -> dict | None:
         return None
 
 
-def _send_control(cmd: str) -> bool:
+def _send_control(cmd: str, **extra: str) -> bool:
     try:
         from mascot_win.single import state_dir
     except Exception:  # noqa: BLE001
@@ -210,7 +213,7 @@ def _send_control(cmd: str) -> bool:
     try:
         path = Path(state_dir()) / "control.json"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"cmd": cmd}), encoding="utf-8")
+        path.write_text(json.dumps({"cmd": cmd, **extra}, ensure_ascii=False), encoding="utf-8")
         return True
     except OSError:
         return False
@@ -232,11 +235,22 @@ def cmd_ctl(args: argparse.Namespace) -> int:
                     "degraded": state.get("degraded", False),
                     "pet": state.get("pet"),
                     "uptime_s": state.get("uptime_s"),
+                    "sending": state.get("sending", False),
+                    "messages": state.get("messages", []),
                     "checks": checks,
                 },
             },
             EXIT_OK,
         )
+    if args.action == "send":
+        if pid is None:
+            return _fail("NOT_RUNNING", "没有运行中的实例", EXIT_ENV)
+        text = (args.text or "").strip()
+        if not text:
+            return _fail("EMPTY_TEXT", "消息为空", EXIT_ARGS)
+        if not _send_control("send", text=text):
+            return _fail("IPC_FAILED", "控制文件写入失败", EXIT_FAIL)
+        return _emit({"ok": True, "data": {"sent": "send", "pid": pid}}, EXIT_OK)
     if args.action in ("to-ball", "to-panel"):
         if pid is None:
             return _fail("NOT_RUNNING", "没有运行中的实例", EXIT_ENV)
@@ -273,6 +287,10 @@ def build_parser() -> argparse.ArgumentParser:
     r = sub.add_parser("run", help="启动桌宠")
     r.add_argument("--config", help="显式配置文件路径")
     r.add_argument("--provider", choices=["wsl", "null"], help="覆盖跨环境 provider")
+    r.add_argument(
+        "--provider-url",
+        help="覆盖 provider 地址（WSL→Windows 互操作会过滤环境变量，验收时必须走参数）",
+    )
     r.add_argument("--duration", type=float, default=0.0, help="运行多少秒后自动退出（验收用）")
     r.add_argument("--demo", action="store_true", help="自动演示：2s 收球、6s 回面板（验收用）")
     r.add_argument("--screenshot", help="运行中截图保存路径（验收用）")
@@ -286,7 +304,8 @@ def build_parser() -> argparse.ArgumentParser:
     r.set_defaults(func=cmd_run)
 
     c = sub.add_parser("ctl", help="控制运行中的实例")
-    c.add_argument("action", choices=["status", "stop", "to-ball", "to-panel"])
+    c.add_argument("action", choices=["status", "stop", "to-ball", "to-panel", "send"])
+    c.add_argument("--text", default="", help="send 动作要发送的文本")
     c.add_argument("--config", help="显式配置文件路径")
     c.set_defaults(func=cmd_ctl)
     return p
@@ -298,6 +317,10 @@ def main(argv: list[str] | None = None) -> int:
         args = parser.parse_args(argv)
     except SystemExit as exc:  # argparse 的参数错误 -> 统一退出码 2
         return EXIT_ARGS if exc.code not in (0, None) else EXIT_OK
+    # Windows 控制台默认 GBK：管道/互操作场景下会输出乱码，统一强制 UTF-8
+    for stream in (sys.stdout, sys.stderr):
+        with contextlib.suppress(Exception):
+            stream.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
     try:
         return int(args.func(args))
     except Exception as exc:  # noqa: BLE001 - CLI 边界，必须兜住并给出可读错误

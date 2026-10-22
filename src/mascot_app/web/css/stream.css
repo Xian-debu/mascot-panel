@@ -1,0 +1,33 @@
+/* 消息流：时间分桶、同角色合并、代码块、长消息折叠。 */
+.stream{flex:1;overflow-y:auto;overflow-x:hidden;padding:var(--s3);
+  display:flex;flex-direction:column;gap:var(--s2);scroll-behavior:smooth;}
+.stream::-webkit-scrollbar{width:6px;}
+.stream::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+.empty{margin:auto;color:var(--text-muted);font-size:var(--fs-12);text-align:center;line-height:1.8;}
+
+.bucket{align-self:center;margin:var(--s2) 0 var(--s1);color:var(--text-muted);
+  font-size:var(--fs-11);}
+
+.msg{max-width:92%;padding:var(--s2) var(--s3);border:1px solid var(--border);
+  border-radius:var(--r-card);background:var(--card);font-size:var(--fs-13);
+  white-space:pre-wrap;word-break:break-word;}
+.msg.assistant{border-top-left-radius:var(--s1);}
+.msg.user{align-self:flex-end;background:var(--accent-soft);
+  border-color:var(--accent-line);border-top-right-radius:var(--s1);}
+.msg .who{display:block;font-size:var(--fs-11);color:var(--text-dim);margin-bottom:2px;}
+.msg.pending{opacity:.6;}
+
+.msg code{font-family:var(--mono);font-size:var(--fs-12);
+  background:var(--bg);border:1px solid var(--border);border-radius:var(--s1);padding:0 4px;}
+.msg pre{margin:var(--s2) 0 0;padding:var(--s2);background:var(--bg);
+  border:1px solid var(--border);border-radius:var(--r-card);overflow-x:auto;position:relative;}
+.msg pre code{background:none;border:0;padding:0;display:block;white-space:pre;}
+.msg pre .copy{position:absolute;top:var(--s1);right:var(--s1);font-size:var(--fs-11);
+  padding:2px 6px;opacity:0;transition:opacity var(--fast);}
+.msg pre:hover .copy{opacity:1;}
+
+.msg.folded .body{max-height:calc(var(--fs-13) * 1.6 * 12);overflow:hidden;
+  mask-image:linear-gradient(black 70%,transparent);}
+.expand{align-self:flex-start;font-size:var(--fs-11);color:var(--accent);
+  background:none;border:0;padding:2px 0;cursor:pointer;}
