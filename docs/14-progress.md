@@ -1,6 +1,6 @@
 # 进度报告（自动维护，供明早阅读）
 
-## 明早先读：2026-10-22 夜间交付总结（更新至 M18）
+## 明早先读：2026-10-22 夜间交付总结（更新至 M19）
 
 **做完了什么**：按 docs/10-plan.md 推进 M0→M13，产品仓库 /root/mascot
 （骨架 → 纯逻辑层 → CLI/provider → CI/进度 → 部署 → M1 平台 spike → M2 运行时 → M3 渲染 →
@@ -8,8 +8,8 @@ M4 面板与聊天 → M5 打包交付 → M6a/b/c 视觉对齐（像素时钟�
 M8 冷启动 → M9 免打扰与多屏定位 → M10 接上旧聊天后端 → M11 流式增量与停止生成 →
 M12 配置写回与开关持久化 → M13 待机形态 → M14 待机球像素时钟化/可拖动/记忆位置 →
 M15 聊天记录跨重启保留与清空 → M16 待机球右键菜单/边缘吸附/回到右下角 →
-M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真回滚）。
-管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023、M18 的 SG-0024 见当天提交）。
+M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真回滚 → M19 配置热重载）。
+管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023、M18 的 SG-0024、M19 的 SG-0025 见当天提交）。
 
 **现在能做什么**（Windows 上已装好）：
 ```
@@ -26,7 +26,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 **验证过的硬事实**：
 - Linux：ruff 0 / pyright 0 / pytest 全绿；Windows：全量回归通过；M10 验收 9/9、M11 验收 15/15、
   M12 验收 16/16、M13 验收 10/10、M14 验收 9/9、M15 验收 14/14、M16 验收 7/7、
-  M17 验收 12/12、M18 验收 15/15 PASS。
+  M17 验收 12/12、M18 验收 15/15、M19 验收 17/17 PASS。
 - 真机跟随 TX-Pet 窗口（961,459 / 1616,272，随窗口移动）、面板与环绕球同进程共存、ctl 全动作可用、
   托盘菜单与双击互切可用、安装/卸载/回滚/双跑/自启逐个跑过（evidence/m5-*、m6*、m7-*、m8-*、m9 验收输出）。
 - 冷启动 **进程创建→面板可见 0.70 s**（安装版 0.71–0.87 s），此前 4.34 s；DoD ≤2 s 已达成（docs/24）。
@@ -46,7 +46,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 
 **已知缺口**：未签名（SmartScreen 可能提示）、无自动更新、
 面板立绘仍引用旧项目资源（未迁入本仓库）、旧后端未用真实 API Key 实测、
-配置写回仍无热重载（改完要重启）、历史只存最近 50 条且清空仅限本地、
+历史只存最近 50 条且清空仅限本地、
 待机球吸附只在松手时生效（无拖动中橡皮筋、无双击复位）。
 
 **仓库位置**：
@@ -493,3 +493,23 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
   版本排序不能按字典序。细节见 `docs/34-m18-versions.md`。
 - 遗留：固定保留 2 个版本（不按磁盘占用回收）；无 `mascot rollback` 子命令；目录大小按遍历统计。
 - 交付：build-win.sh + install-win.sh 跑完，安装版 doctor/versions 正常；current.txt=0.1.0。
+
+### M19 配置热重载：改 config.toml 不用重启（2026-10-22 夜）
+
+- 痛点：M17 解决了写回丢注释，但「改完必须重启」还在；桌宠是常驻进程。
+- 字段分两类：热字段（fps/poll_interval_ms/orbit_speed/orbit_period_s/ball_ratio/orbit_gap/
+  follow_offset/lost_frames/notify_pulse）改完立刻生效；冷字段（panel_size/provider/
+  pet_window_class/log_level…）不假装生效，只写进 state.json 的 config.restart_required。
+- `mascot_core/config.py`：新增 `HOT_FIELDS` 与纯函数 `merge_hot(old, new) -> (merged, restart)`。
+- `runtime.py`：`Runtime(..., config_path=, pinned=)`；主循环每秒比 `(mtime_ns, size)`，
+  变了就 load_settings → merge_hot → 换 self.settings；解析失败只 warning 不崩；
+  interval/frame_s 挪进循环内；snapshot 新增 settings/config 两段。
+- `config set/unset` 返回 `hot` 与真实 `restart_required`（以前恒 true）。
+- 单测 5 项（test_hot_reload.py：热字段生效且不就地改旧对象、冷字段报重启、provider 需重启、
+  HOT_FIELDS 都存在、返回类型），pytest 149 passed / ruff 0 / pyright 0。
+- 验收 `scripts/verify_m19.py` 17/17 PASS；回归 M13–M18 全 exit 0。
+- 坑：环境变量 MASCOT_* 会盖住 TOML（`_pinned` 自动排除，验收冷字段改用 log_level）；
+  `--provider null` 也是覆盖，不 pin 会每秒假报 provider 需重启；
+  interval/frame_s 留在循环外会让热重载变成假象。细节见 `docs/35-m19-hot-reload.md`。
+- 遗留：冷字段不自动重建窗口/后端；只监视单一路径（无 include）；reloads 不落盘。
+- 交付：build-win.sh + install-win.sh 跑完，安装版 doctor/versions 正常。

@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from mascot_app import boot
-from mascot_core.config import Settings
+from mascot_core.config import Settings, load_settings, merge_hot
 from mascot_core.contract import ChatProvider, Message, SendCancelled
 from mascot_core.geometry import Rect, Screen, angle_for_time, follow_rect, orbit_layout
 from mascot_core.history import dump_history, merge_history, parse_history
@@ -250,8 +250,20 @@ class Runtime:
         provider: ChatProvider,
         *,
         panel_html: str | None = None,
+        config_path: Path | None = None,
+        pinned: set[str] | None = None,
     ) -> None:
         self.settings = settings
+        # 热重载：记住配置文件路径与上次 mtime/size，循环里每秒比一次
+        self._config_path = config_path
+        self._config_stamp: tuple[int, int] | None = self._config_mtime()
+        self._config_reloads = 0
+        self._restart_required: list[str] = []
+        # 命令行显式覆盖过的字段（如 --provider null）不算"配置文件里没写"，不报重启；
+        # 环境变量 MASCOT_* 同理（env 优先级高于 TOML，文件里的值本来就不生效）
+        self._pinned = set(pinned or ()) | {
+            name for name in Settings.model_fields if f"MASCOT_{name.upper()}" in os.environ
+        }
         self.provider = provider
         self.panel_html = panel_html or load_panel_html()
 
@@ -309,6 +321,16 @@ class Runtime:
                 "dnd": self._dnd,
                 "autostart": _autostart_enabled(),
                 "messages": [m.to_dict() for m in self._messages[-MESSAGE_LIMIT:]],
+                "settings": {
+                    "fps": self.settings.fps,
+                    "poll_interval_ms": self.settings.poll_interval_ms,
+                    "orbit_speed": self.settings.orbit_speed,
+                },
+                "config": {
+                    "path": str(self._config_path) if self._config_path else None,
+                    "reloads": self._config_reloads,
+                    "restart_required": self._restart_required,
+                },
                 "boot": boot.marks(),
             }
 
@@ -499,6 +521,39 @@ class Runtime:
                 json.dumps(self.snapshot(), ensure_ascii=False, indent=2), encoding="utf-8"
             )
             tmp.replace(path)
+
+    def _config_mtime(self) -> tuple[int, int] | None:
+        """配置文件当前 mtime/size；文件不存在返回 None。"""
+        if self._config_path is None:
+            return None
+        try:
+            st = self._config_path.stat()
+        except OSError:
+            return None
+        return (st.st_mtime_ns, st.st_size)
+
+    def _maybe_reload_config(self) -> None:
+        """配置被改过就热重载：热字段立刻生效，其余记进 restart_required。"""
+        stamp = self._config_mtime()
+        if stamp is None or stamp == self._config_stamp:
+            return
+        self._config_stamp = stamp
+        if self._config_path is None:
+            return
+        try:
+            fresh = load_settings(self._config_path)
+        except Exception as exc:  # noqa: BLE001 - 坏配置不能把运行中的实例搞崩
+            log.warning("config reload skipped: %s", exc)
+            self._restart_required = []
+            return
+        merged, restart = merge_hot(self.settings, fresh)
+        restart = [name for name in restart if name not in self._pinned]
+        self.settings = merged
+        # 后端/窗口相关字段变了：不重建，但要让用户知道得重启
+        self._restart_required = restart
+        self._config_reloads += 1
+        log.info("config reloaded (hot fields applied); restart required: %s", restart or "none")
+        self._write_state()
 
     def _poll_control(self) -> None:
         """控制文件 IPC：ctl 写 cmd，运行中的实例从这里取（M2 最小实现）。"""
@@ -744,11 +799,10 @@ class Runtime:
         with contextlib.suppress(OSError):
             (_state_dir() / "control.json").unlink()
 
-        interval = self.settings.poll_interval_ms / 1000.0
-        frame_s = 1.0 / self.settings.fps
         next_poll = 0.0
         next_frame = 0.0
         last_state_write = 0.0
+        last_config_check = 0.0
 
         try:
             while not self._stop.is_set():
@@ -756,6 +810,13 @@ class Runtime:
                 self._ball.pump()
                 self._drain_events()
                 self._drain_commands()
+
+                # 配置文件每秒查一次：改了热重载（否则用户得重启才看到 fps 变化）
+                if now - last_config_check >= 1.0:
+                    last_config_check = now
+                    self._maybe_reload_config()
+                interval = self.settings.poll_interval_ms / 1000.0
+                frame_s = 1.0 / self.settings.fps
 
                 if now >= next_poll:
                     next_poll = now + interval

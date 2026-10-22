@@ -78,6 +78,33 @@ class Settings(BaseSettings):
         return (init_settings, env_settings, dotenv_settings, file_secret_settings)
 
 
+# 能在运行中安全替换的字段：每次 tick / poll 都从 self.settings 重新读，换了立刻生效。
+# 其余字段（panel_size、provider、pet_window_class …）牵涉窗口/后端重建，只能重启生效。
+HOT_FIELDS = (
+    "fps",
+    "poll_interval_ms",
+    "orbit_speed",
+    "orbit_period_s",
+    "ball_ratio",
+    "orbit_gap",
+    "follow_offset",
+    "lost_frames",
+    "notify_pulse",
+)
+
+
+def merge_hot(old: Settings, new: Settings) -> tuple[Settings, list[str]]:
+    """把 new 里的热字段套到 old 上；返回 (合并结果, 需要重启才生效的字段名)。"""
+    hot = {name: getattr(new, name) for name in HOT_FIELDS}
+    merged = old.model_copy(update=hot)
+    restart = sorted(
+        name
+        for name in type(old).model_fields
+        if name not in HOT_FIELDS and getattr(old, name) != getattr(new, name)
+    )
+    return merged, restart
+
+
 def load_settings(config_file: Path | None = None) -> Settings:
     """显式传入路径时读该 TOML；否则读默认位置（不存在则用默认值）。"""
     path = config_file or default_config_path()

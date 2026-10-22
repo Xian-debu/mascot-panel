@@ -21,7 +21,7 @@ from mascot_app import __version__, boot
 from mascot_app.logging_setup import setup_logging
 from mascot_app.providers import make_provider
 from mascot_core import configfile, versions
-from mascot_core.config import Settings, default_config_path, load_settings
+from mascot_core.config import HOT_FIELDS, Settings, default_config_path, load_settings
 
 EXIT_OK = 0
 EXIT_ARGS = 2
@@ -130,7 +130,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    settings = load_settings(Path(args.config) if args.config else None)
+    config_path = Path(args.config) if args.config else default_config_path()
+    settings = load_settings(config_path if config_path.is_file() else None)
     if args.provider:
         settings.provider = args.provider
     if args.allow_offline is not None:
@@ -155,7 +156,16 @@ def cmd_run(args: argparse.Namespace) -> int:
         return _fail("ENV_UNSUPPORTED", f"无法创建单实例互斥体: {exc}", EXIT_ENV)
 
     provider = make_provider(settings)
-    runtime = Runtime(settings, provider)
+    pinned = {
+        name
+        for name, value in (
+            ("provider", args.provider),
+            ("allow_offline", args.allow_offline),
+            ("provider_base_url", args.provider_url),
+        )
+        if value is not None
+    }
+    runtime = Runtime(settings, provider, config_path=config_path, pinned=pinned)
     try:
         runtime.run(
             duration_s=args.duration,
@@ -385,13 +395,19 @@ def cmd_config(args: argparse.Namespace) -> int:
             target, value = configfile.set_config_value(key, raw, path)
             return _emit(
                 {"ok": True, "data": {"path": str(target), "key": key, "value": _jsonable(value),
-                                      "restart_required": True}},
+                                      "hot": key in HOT_FIELDS,
+                                      "restart_required": key not in HOT_FIELDS}},
                 EXIT_OK,
             )
         if action == "unset":
             key = args.key or ""
             removed = configfile.unset_config_value(key, path)
-            return _emit({"ok": True, "data": {"path": str(path), "key": key, "removed": removed}}, EXIT_OK)
+            return _emit(
+                {"ok": True, "data": {"path": str(path), "key": key, "removed": removed,
+                                      "hot": key in HOT_FIELDS,
+                                      "restart_required": key not in HOT_FIELDS}},
+                EXIT_OK,
+            )
     except ValueError as exc:
         return _fail("BAD_VALUE", str(exc), EXIT_ARGS)
     except OSError as exc:
