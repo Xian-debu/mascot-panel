@@ -1,0 +1,82 @@
+from __future__ import annotations
+
+from mascot_core.state import (
+    HIDE_BALL,
+    HIDE_PANEL,
+    SHOW_BALL,
+    SHOW_PANEL,
+    START_FRAMES,
+    STOP_FRAMES,
+    Event,
+    Machine,
+    State,
+    transition,
+)
+
+
+def test_idle_to_tracking_on_pet_found() -> None:
+    t = transition(State.IDLE, Event.PET_FOUND)
+    assert t.state is State.TRACKING
+    assert SHOW_PANEL in t.effects
+    assert t.reason == "PET_FOUND"
+
+
+def test_click_clock_switches_to_orbital() -> None:
+    t = transition(State.TRACKING, Event.CLICK_CLOCK)
+    assert t.state is State.ORBITAL
+    assert set(t.effects) == {HIDE_PANEL, SHOW_BALL, START_FRAMES}
+
+
+def test_click_ball_returns_to_tracking() -> None:
+    t = transition(State.ORBITAL, Event.CLICK_BALL)
+    assert t.state is State.TRACKING
+    assert set(t.effects) == {STOP_FRAMES, HIDE_BALL, SHOW_PANEL}
+
+
+def test_ignored_event_keeps_state() -> None:
+    t = transition(State.IDLE, Event.CLICK_CLOCK)
+    assert t.state is State.IDLE
+    assert t.effects == ()
+    assert t.reason.startswith("IGNORED:")
+
+
+def test_degraded_remembers_and_restores_orbital() -> None:
+    m = Machine(state=State.ORBITAL)
+    t = m.push(Event.PROVIDER_DOWN)
+    assert t.state is State.DEGRADED
+    assert m.resume_state is State.ORBITAL
+    t2 = m.push(Event.PROVIDER_READY)
+    assert t2.state is State.ORBITAL
+    assert m.resume_state is None
+
+
+def test_degraded_restores_idle() -> None:
+    m = Machine(state=State.IDLE)
+    m.push(Event.PROVIDER_DOWN)
+    assert m.push(Event.PROVIDER_READY).state is State.IDLE
+
+
+def test_repeated_provider_down_is_ignored() -> None:
+    m = Machine(state=State.TRACKING)
+    m.push(Event.PROVIDER_DOWN)
+    t = m.push(Event.PROVIDER_DOWN)
+    assert t.state is State.DEGRADED
+    assert t.reason == "IGNORED:PROVIDER_DOWN"
+
+
+def test_pet_lost_in_orbital_hides_ball() -> None:
+    t = transition(State.ORBITAL, Event.PET_LOST)
+    assert t.state is State.IDLE
+    assert STOP_FRAMES in t.effects and HIDE_BALL in t.effects
+
+
+def test_render_failed_restarts_orbital() -> None:
+    t = transition(State.ORBITAL, Event.RENDER_FAILED)
+    assert t.state is State.ORBITAL
+    assert t.reason == "RENDER_RESTART"
+
+
+def test_machine_is_pure_without_side_effects() -> None:
+    m = Machine()
+    assert m.state is State.IDLE
+    assert m.resume_state is None
