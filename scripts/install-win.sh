@@ -41,6 +41,26 @@ cp -r "$SRC" "$DEST"
 printf '%s\n' "$VERSION" >"$LOCAL/current.txt.tmp"
 mv -f "$LOCAL/current.txt.tmp" "$LOCAL/current.txt"
 
+# 旧版本目录回收：current 永不删，另外保留最近 (KEEP-1) 个作为回滚目标。
+# 用刚装好的 exe 自带的 versions 命令，保证"谁能列出目录"只有一个实现（mascot_core/versions.py）。
+KEEP=${KEEP:-2}
+if [ -x "$DEST/mascot.exe" ]; then
+  "$DEST/mascot.exe" versions --prune --keep "$KEEP" >/dev/null 2>&1 || true
+fi
+
+# 回滚目标：版本号严格小于 current 的最新一个（sort -V 按版本序，不是字典序；
+# 降级安装时也不能"回滚"到更新的版本）
+PREV="$(
+  {
+    printf '%s\n' "$VERSION"
+    for d in "$LOCAL"/app/*/; do
+      name="$(basename "$d")"
+      [ -x "$d/mascot.exe" ] || continue
+      printf '%s\n' "$name"
+    done
+  } | sort -V | awk -v cur="$VERSION" '{ if ($0 == cur) exit; prev = $0 } END { if (prev != "") print prev }'
+)"
+
 cat >"$LOCAL/rollback.bat" <<EOF
 @echo off
 chcp 65001 >nul
@@ -52,11 +72,15 @@ if exist "%MASCOT%\\app\\$VERSION\\mascot.exe" (
 )
 "%MASCOT%\\app\\$VERSION\\mascot.exe" autostart off >nul 2>&1
 echo 新版已停止、自启已关闭。
-if exist "E:\\TX-Pet\\scripts\\start_frameless.bat" (
-  echo 启动旧版: E:\\TX-Pet\\scripts\\start_frameless.bat
+if exist "%MASCOT%\\app\\$PREV\\mascot.exe" (
+  echo 启动上一版本: %MASCOT%\\app\\$PREV\\mascot.exe
+  start "" "%MASCOT%\\app\\$PREV\\mascot.exe"
+  "%MASCOT%\\app\\$PREV\\mascot.exe" autostart on --exe "%MASCOT%\\app\\$PREV\\mascot.exe" >nul 2>&1
+) else if exist "E:\\TX-Pet\\scripts\\start_frameless.bat" (
+  echo 启动冻结旧版: E:\\TX-Pet\\scripts\\start_frameless.bat
   call "E:\\TX-Pet\\scripts\\start_frameless.bat"
 ) else (
-  echo 未找到旧版启动脚本，请手动启动 E:\\TX-Pet。
+  echo 未找到上一版本与旧版启动脚本，请手动启动。
 )
 endlocal
 EOF
@@ -72,4 +96,6 @@ fi
 
 echo "== done: $LOCAL_WIN\\mascot\\app\\$VERSION\\mascot.exe"
 echo "   current.txt = $(cat "$LOCAL/current.txt")"
+echo "   回滚目标 = ${PREV:-（无，回滚到 E:\\TX-Pet）}"
+echo "   版本目录 = $(ls -1 "$LOCAL/app" | tr '\n' ' ')"
 echo "   回滚脚本: $LOCAL_WIN\\mascot\\rollback.bat"

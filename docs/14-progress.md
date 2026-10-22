@@ -1,6 +1,6 @@
 # 进度报告（自动维护，供明早阅读）
 
-## 明早先读：2026-10-22 夜间交付总结（更新至 M17）
+## 明早先读：2026-10-22 夜间交付总结（更新至 M18）
 
 **做完了什么**：按 docs/10-plan.md 推进 M0→M13，产品仓库 /root/mascot
 （骨架 → 纯逻辑层 → CLI/provider → CI/进度 → 部署 → M1 平台 spike → M2 运行时 → M3 渲染 →
@@ -8,8 +8,8 @@ M4 面板与聊天 → M5 打包交付 → M6a/b/c 视觉对齐（像素时钟�
 M8 冷启动 → M9 免打扰与多屏定位 → M10 接上旧聊天后端 → M11 流式增量与停止生成 →
 M12 配置写回与开关持久化 → M13 待机形态 → M14 待机球像素时钟化/可拖动/记忆位置 →
 M15 聊天记录跨重启保留与清空 → M16 待机球右键菜单/边缘吸附/回到右下角 →
-M17 配置写回保留注释与未知键）。
-管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023 见当天提交）。
+M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真回滚）。
+管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023、M18 的 SG-0024 见当天提交）。
 
 **现在能做什么**（Windows 上已装好）：
 ```
@@ -26,7 +26,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 **验证过的硬事实**：
 - Linux：ruff 0 / pyright 0 / pytest 全绿；Windows：全量回归通过；M10 验收 9/9、M11 验收 15/15、
   M12 验收 16/16、M13 验收 10/10、M14 验收 9/9、M15 验收 14/14、M16 验收 7/7、
-  M17 验收 12/12 PASS。
+  M17 验收 12/12、M18 验收 15/15 PASS。
 - 真机跟随 TX-Pet 窗口（961,459 / 1616,272，随窗口移动）、面板与环绕球同进程共存、ctl 全动作可用、
   托盘菜单与双击互切可用、安装/卸载/回滚/双跑/自启逐个跑过（evidence/m5-*、m6*、m7-*、m8-*、m9 验收输出）。
 - 冷启动 **进程创建→面板可见 0.70 s**（安装版 0.71–0.87 s），此前 4.34 s；DoD ≤2 s 已达成（docs/24）。
@@ -44,7 +44,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
    起在 127.0.0.1:8890，面板就能真聊（历史来自 /api/pet/news，回复由 SSE 分片拼接）。
    注意：真旧后端需要 API Key，我今晚只用一个模拟旧后端的假服务验证过（scripts/verify_m10.py 9/9 PASS）。
 
-**已知缺口**：未签名（SmartScreen 可能提示）、无自动更新、旧版本目录不自动回收、
+**已知缺口**：未签名（SmartScreen 可能提示）、无自动更新、
 面板立绘仍引用旧项目资源（未迁入本仓库）、旧后端未用真实 API Key 实测、
 配置写回仍无热重载（改完要重启）、历史只存最近 50 条且清空仅限本地、
 待机球吸附只在松手时生效（无拖动中橡皮筋、无双击复位）。
@@ -472,3 +472,24 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
   改写值时不保留 `1_000` 这类原写法。
 - 交付：`dist/mascot/mascot.exe` 重建，`install-win.sh` 已装到
   `C:/Users/ZYX/AppData/Local/mascot/app/0.1.0`（`current.txt=0.1.0`），安装版 doctor 通过。
+
+### M18 已安装版本目录：列举、回收、真回滚（2026-10-22 夜）
+
+- 痛点：安装布局是「一版本一目录 + current.txt」，升级只增不减，每次约 45MB（exe 8MB + _internal）；
+  `rollback.bat` 只认「停新版 → 启动 E:/TX-Pet」，明明 app/ 里有上一版却不认。
+- 新增 `src/mascot_core/versions.py`（纯逻辑）：`is_version_name` / `version_key`（0.10.0 > 0.9.0）/
+  `read_current` / `list_versions`（标 current、统计真实字节）/ `pick_prune`（current 必留，
+  keep 是总数）/ `prune_versions`（默认 dry_run，删前核对父目录与版本名，backup/ 不碰）。
+- CLI 新增 `mascot versions [--prune --keep N --dry-run --app-dir]`，输出 JSON。
+- `scripts/install-win.sh`：装完调用新 exe 的 `versions --prune --keep ${KEEP:-2}` 回收；
+  用 `sort -V` + `awk` 找**严格小于 current** 的最新版本写进 rollback.bat——有它就启动它并设自启，
+  没有才退回 E:/TX-Pet（降级安装不会「回滚」到更新版）。
+- 单测 9 项（test_versions.py：版本名判定、排序、current 标记、缺目录、pick_prune 各分支、
+  dry-run 不删、真删留 current、外来目录不动），pytest 144 passed / ruff 0 / pyright 0。
+- 验收 `scripts/verify_m18.py` 15/15 PASS（临时 app 目录 + 真实安装目录一致性）。
+- 端到端：造 0.0.7/0.0.8/0.0.9 假目录 → `KEEP=2 install-win.sh` 后只剩 0.0.9 与 0.1.0，
+  回滚目标 0.0.9；清掉假目录重装 → 回滚目标「无，回滚到 E:/TX-Pet」。
+- 坑：dist 里必须是带 versions 子命令的新 exe，否则 prune 静默失败；keep 是总数不是额外数；
+  版本排序不能按字典序。细节见 `docs/34-m18-versions.md`。
+- 遗留：固定保留 2 个版本（不按磁盘占用回收）；无 `mascot rollback` 子命令；目录大小按遍历统计。
+- 交付：build-win.sh + install-win.sh 跑完，安装版 doctor/versions 正常；current.txt=0.1.0。

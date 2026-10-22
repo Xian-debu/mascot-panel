@@ -20,7 +20,7 @@ from pathlib import Path
 from mascot_app import __version__, boot
 from mascot_app.logging_setup import setup_logging
 from mascot_app.providers import make_provider
-from mascot_core import configfile
+from mascot_core import configfile, versions
 from mascot_core.config import Settings, default_config_path, load_settings
 
 EXIT_OK = 0
@@ -326,6 +326,29 @@ def cmd_autostart(args: argparse.Namespace) -> int:
         return _fail("AUTOSTART_FAILED", str(exc), EXIT_ENV)
 
 
+def _app_dir(override: str | None) -> Path:
+    """已安装版本目录：默认 %LOCALAPPDATA%/mascot/app。"""
+    if override:
+        return Path(override)
+    local = os.environ.get("LOCALAPPDATA")
+    base = Path(local) / "mascot" if local else Path.home() / ".mascot"
+    return base / "app"
+
+
+def cmd_versions(args: argparse.Namespace) -> int:
+    """列出/回收已安装的版本目录（current 永不删）。"""
+    app_dir = _app_dir(args.app_dir)
+    data: dict = {"app_dir": str(app_dir), "current": versions.read_current(app_dir)}
+    data["versions"] = versions.list_versions(app_dir)
+    data["total_bytes"] = sum(int(row["size_bytes"]) for row in data["versions"])
+    if args.prune:
+        data["prune"] = versions.prune_versions(
+            app_dir, keep=args.keep, dry_run=args.dry_run
+        )
+        data["versions"] = versions.list_versions(app_dir)
+    return _emit({"ok": True, "data": data}, EXIT_OK)
+
+
 def cmd_config(args: argparse.Namespace) -> int:
     """配置文件的读/写/路径。写回只动一个键，其它键原样保留。"""
     path = Path(args.config) if args.config else default_config_path()
@@ -424,6 +447,13 @@ def build_parser() -> argparse.ArgumentParser:
     cf.add_argument("value", nargs="?", help="set 的新值")
     cf.add_argument("--config", help="显式配置文件路径")
     cf.set_defaults(func=cmd_config)
+
+    v = sub.add_parser("versions", help="已安装版本目录：列举 / 回收旧版本")
+    v.add_argument("--prune", action="store_true", help="回收旧版本目录")
+    v.add_argument("--keep", type=int, default=2, help="保留几个版本（含 current，默认 2）")
+    v.add_argument("--dry-run", action="store_true", help="prune 只报告不删除")
+    v.add_argument("--app-dir", help="覆盖 app 目录（验收用）")
+    v.set_defaults(func=cmd_versions)
 
     c = sub.add_parser("ctl", help="控制运行中的实例")
     c.add_argument(
