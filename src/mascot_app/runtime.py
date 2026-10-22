@@ -132,13 +132,13 @@ def load_local_history() -> list[Message]:
     return parse_history(raw)
 
 
-def save_local_history(messages: list[Message]) -> None:
+def save_local_history(messages: list[Message], limit: int = 50) -> None:
     """原子写盘，失败只记日志（聊天记录写不了也不该影响桌宠本体）。"""
     path = _history_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".json.tmp")
-        tmp.write_text(dump_history(messages[-MESSAGE_LIMIT:]), encoding="utf-8")
+        tmp.write_text(dump_history(messages[-limit:]), encoding="utf-8")
         tmp.replace(path)
     except OSError as exc:
         log.warning("history: 写入失败 %s: %s", path, exc)
@@ -149,7 +149,6 @@ CSS_PLACEHOLDER = "/*__CSS__*/"
 JS_PLACEHOLDER = "//__JS__"
 CSS_MODULES = ("base.css", "stream.css", "composer.css", "states.css")
 JS_MODULES = ("state.js", "clock.js", "ui.js", "chat.js", "composer.js", "main.js")
-MESSAGE_LIMIT = 50
 
 
 def _pkg_text(rel: str) -> str:
@@ -320,9 +319,10 @@ class Runtime:
                 "paused": self._paused,
                 "dnd": self._dnd,
                 "autostart": _autostart_enabled(),
-                "messages": [m.to_dict() for m in self._messages[-MESSAGE_LIMIT:]],
+                "messages": [m.to_dict() for m in self._messages[-self.settings.history_limit:]],
                 "settings": {
                     "fps": self.settings.fps,
+                    "history_limit": self.settings.history_limit,
                     "poll_interval_ms": self.settings.poll_interval_ms,
                     "orbit_speed": self.settings.orbit_speed,
                 },
@@ -378,19 +378,23 @@ class Runtime:
 
     def _load_history(self) -> None:
         try:
-            history = self.provider.history(limit=MESSAGE_LIMIT)
+            history = self.provider.history(limit=self.settings.history_limit)
         except Exception as exc:  # provider 是外部世界，绝不假设它守规矩
             self._provider_detail = str(exc)
             return
         with self._lock:
             local = list(self._messages)
-            self._messages = merge_history(history, local, limit=MESSAGE_LIMIT)
+            self._messages = merge_history(history, local, limit=self.settings.history_limit)
         self._persist_history()
 
     def _persist_history(self) -> None:
+        limit = self.settings.history_limit
         with self._lock:
+            # 内存也别无上限地长：盘上只留 limit 条，内存同样只留 limit 条
+            if len(self._messages) > limit:
+                self._messages = self._messages[-limit:]
             messages = list(self._messages)
-        save_local_history(messages)
+        save_local_history(messages, limit=limit)
         # 顺手刷新 state.json：`ctl status` 才看得到新消息（面板自己走 JS API，不依赖它）
         self._write_state()
 
@@ -552,7 +556,14 @@ class Runtime:
         # 后端/窗口相关字段变了：不重建，但要让用户知道得重启
         self._restart_required = restart
         self._config_reloads += 1
+        # history_limit 调小了：内存与磁盘一起裁，别让旧消息在下次写盘前复活
+        trimmed = len(self._messages) > self.settings.history_limit
+        if trimmed:
+            with self._lock:
+                self._messages = self._messages[-self.settings.history_limit:]
         log.info("config reloaded (hot fields applied); restart required: %s", restart or "none")
+        if trimmed:
+            self._persist_history()
         self._write_state()
 
     def _poll_control(self) -> None:

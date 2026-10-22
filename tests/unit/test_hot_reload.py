@@ -38,3 +38,19 @@ def test_hot_fields_all_exist() -> None:
 def test_merged_is_same_type() -> None:
     merged, _ = merge_hot(Settings(), Settings(fps=20))
     assert isinstance(merged, Settings)
+
+
+def test_history_limit_is_hot() -> None:
+    merged, restart = merge_hot(Settings(history_limit=50), Settings(history_limit=5))
+    assert merged.history_limit == 5
+    assert restart == []
+
+
+def test_history_limit_bounds() -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        Settings(history_limit=2)
+    with pytest.raises(ValidationError):
+        Settings(history_limit=501)

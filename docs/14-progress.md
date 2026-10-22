@@ -1,6 +1,6 @@
 # 进度报告（自动维护，供明早阅读）
 
-## 明早先读：2026-10-22 夜间交付总结（更新至 M19）
+## 明早先读：2026-10-22 夜间交付总结（更新至 M20）
 
 **做完了什么**：按 docs/10-plan.md 推进 M0→M13，产品仓库 /root/mascot
 （骨架 → 纯逻辑层 → CLI/provider → CI/进度 → 部署 → M1 平台 spike → M2 运行时 → M3 渲染 →
@@ -8,8 +8,8 @@ M4 面板与聊天 → M5 打包交付 → M6a/b/c 视觉对齐（像素时钟�
 M8 冷启动 → M9 免打扰与多屏定位 → M10 接上旧聊天后端 → M11 流式增量与停止生成 →
 M12 配置写回与开关持久化 → M13 待机形态 → M14 待机球像素时钟化/可拖动/记忆位置 →
 M15 聊天记录跨重启保留与清空 → M16 待机球右键菜单/边缘吸附/回到右下角 →
-M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真回滚 → M19 配置热重载）。
-管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023、M18 的 SG-0024、M19 的 SG-0025 见当天提交）。
+M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真回滚 → M19 配置热重载 → M20 历史条数可配置）。
+管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023、M18 的 SG-0024、M19 的 SG-0025、M20 的 SG-0026 见当天提交）。
 
 **现在能做什么**（Windows 上已装好）：
 ```
@@ -26,7 +26,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 **验证过的硬事实**：
 - Linux：ruff 0 / pyright 0 / pytest 全绿；Windows：全量回归通过；M10 验收 9/9、M11 验收 15/15、
   M12 验收 16/16、M13 验收 10/10、M14 验收 9/9、M15 验收 14/14、M16 验收 7/7、
-  M17 验收 12/12、M18 验收 15/15、M19 验收 17/17 PASS。
+  M17 验收 12/12、M18 验收 15/15、M19 验收 17/17、M20 验收 16/16 PASS。
 - 真机跟随 TX-Pet 窗口（961,459 / 1616,272，随窗口移动）、面板与环绕球同进程共存、ctl 全动作可用、
   托盘菜单与双击互切可用、安装/卸载/回滚/双跑/自启逐个跑过（evidence/m5-*、m6*、m7-*、m8-*、m9 验收输出）。
 - 冷启动 **进程创建→面板可见 0.70 s**（安装版 0.71–0.87 s），此前 4.34 s；DoD ≤2 s 已达成（docs/24）。
@@ -46,7 +46,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 
 **已知缺口**：未签名（SmartScreen 可能提示）、无自动更新、
 面板立绘仍引用旧项目资源（未迁入本仓库）、旧后端未用真实 API Key 实测、
-历史只存最近 50 条且清空仅限本地、
+清空历史仅限本地、
 待机球吸附只在松手时生效（无拖动中橡皮筋、无双击复位）。
 
 **仓库位置**：
@@ -512,4 +512,19 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
   `--provider null` 也是覆盖，不 pin 会每秒假报 provider 需重启；
   interval/frame_s 留在循环外会让热重载变成假象。细节见 `docs/35-m19-hot-reload.md`。
 - 遗留：冷字段不自动重建窗口/后端；只监视单一路径（无 include）；reloads 不落盘。
+- 交付：build-win.sh + install-win.sh 跑完，安装版 doctor/versions 正常。
+
+### M20 历史条数可配置（2026-10-22 夜）
+
+- 痛点：M15 落盘后上限写死 `MESSAGE_LIMIT = 50`，用户改不了。
+- `mascot_core/config.py`：新增 `history_limit: int = Field(default=50, ge=5, le=500)`，并加入 `HOT_FIELDS`。
+- `runtime.py`：删掉 `MESSAGE_LIMIT`；`save_local_history(messages, limit=50)` 带 limit；
+  snapshot 切片、`provider.history(limit=)`、`merge_history(limit=)`、`_persist_history` 全用
+  `self.settings.history_limit`；snapshot.settings 增加 `history_limit`；
+  `_maybe_reload_config` 里上限调小时立刻裁内存并落盘；`_persist_history` 写盘前先把内存裁到 limit。
+- 验收 `scripts/verify_m20.py` 16/16 PASS（启动 5 条、连发 8 条只留最新 5、热改 10 多留、热改回 5 立刻裁、
+  history.json 同步、不重启、exit 0）；回归 M13–M19 全 exit 0。
+- 坑：只裁盘不裁内存会「假达标」——放宽上限后旧消息复活（grow_keeps_more 一开始就挂了）；
+  热重载裁完必须重新落盘。细节见 `docs/36-m20-history-limit.md`。
+- 遗留：上限只管条数不管单条长度（MAX_TEXT=4000）；调大不会回填已裁消息；clear-history 仍只清本地。
 - 交付：build-win.sh + install-win.sh 跑完，安装版 doctor/versions 正常。

@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_dir: Path | None = None
 
+    # 历史
+    history_limit: int = Field(default=50, ge=5, le=500)
+
     # 功能开关（默认全关的开关必须在这里显式列出）
     notify_pulse: bool = True
     agent_inbox: bool = False
@@ -90,6 +93,7 @@ HOT_FIELDS = (
     "follow_offset",
     "lost_frames",
     "notify_pulse",
+    "history_limit",
 )
 
 
