@@ -173,3 +173,40 @@ Windows: venv\Scripts\python.exe app/0.1.0/scripts/verify_m4.py --provider-url h
 - 折叠阈值固定 12 行，未按面板高度自适应。
 - 键盘焦点管理缺 `Esc` 收球、`↑` 编辑上一条。
 
+
+## M5 — 交付与双跑（2026-10-22）
+
+**做了什么**
+- 打包：PyInstaller onedir（`packaging/entry.py` + `packaging/mascot.spec` + `scripts/build-win.sh`），
+  单 exe 双入口：无参数=GUI（`run` + 隐藏控制台），有参数=CLI（doctor/run/ctl/autostart）。
+  面板 HTML/CSS/JS 随包进 `_internal/mascot_app/web`，冻结态与开发态同一条读取路径。
+- 安装：`scripts/install-win.sh` → `%LOCALAPPDATA%\mascot\app\<ver>` + 原子 `current.txt` +
+  生成 `rollback.bat`；覆盖安装前先 `ctl stop`（否则 Windows 锁 dll，rm 报 Input/output error）。
+- 卸载：`scripts/uninstall-win.sh` 只删版本目录并摘掉指向它的指针，保留日志/状态；`--all` 才整体删。
+- 自启：`mascot autostart on|off|status` 只写 `HKCU\...\Run\Mascot`，默认关闭，安装需显式 `--autostart`。
+- 双跑：旧版 `E:\TX-Pet` 加 `FROZEN.md` 冻结；新版独立窗口标题/类名/单实例名，两版可同时跑。
+- 修语义 bug：`allow_offline` 之前被理解成"后端挂了也不探测"，导致默认配置永远看不到降级横幅；
+  现在无条件探测、如实降级（实测默认 GUI 出横幅）。
+- 文档：`docs/19-m5-delivery.md`。
+
+**怎么验证**
+```
+Linux:   ruff 0 / pyright 0 / pytest 68 passed
+Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
+         dist/mascot/mascot.exe run --provider null ... -> 面板正常（冻结态资源可读）
+         install-win.sh -> app/0.1.0 + current.txt + rollback.bat
+         双击等价（无参数）-> tracking，ctl stop 退出
+         autostart status/on/off -> 注册表值正确
+         rollback.bat -> 停新版 + 起旧版（旧版再被 stop.pyw 清掉）
+         旧版+新版同时跑 -> 互不干扰，新版持续 tracking
+         uninstall-win.sh -> 只删版本目录与指针
+真机截图: evidence/m5-packaged.png、m5-dualrun.png、m5-new-only.png、m5-degraded-default.png
+```
+
+**提交**：见 git log（packaging + scripts + autostart + docs/19）
+
+**已知缺口**
+- 冷启动实测 4.34 s，未达 DoD ≤2 s（pythonnet/clr + pywebview 初始化成本）；优化方向见 docs/19 §8。
+- 未做代码签名；未做自动更新（升级靠再跑 install-win.sh）。
+- 旧版本目录不自动回收（保留回滚能力），后续可加 `mascot gc`。
+- 面板立绘/图标资源仍引用旧项目目录，后续需迁入本仓库。

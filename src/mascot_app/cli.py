@@ -274,6 +274,29 @@ def cmd_ctl(args: argparse.Namespace) -> int:
     return _fail("ARG_BAD_ACTION", f"unknown ctl action: {args.action}", EXIT_ARGS)
 
 
+def cmd_autostart(args: argparse.Namespace) -> int:
+    try:
+        from mascot_win import autostart
+    except Exception as exc:  # noqa: BLE001
+        return _fail("ENV_UNSUPPORTED", f"autostart 仅支持 Windows: {exc}", EXIT_ENV)
+    try:
+        if args.action == "status":
+            return _emit(
+                {
+                    "ok": True,
+                    "data": {"enabled": autostart.is_enabled(), "command": autostart.current_command()},
+                },
+                EXIT_OK,
+            )
+        if args.action == "on":
+            command = autostart.enable(args.exe)
+            return _emit({"ok": True, "data": {"enabled": True, "command": command}}, EXIT_OK)
+        removed = autostart.disable()
+        return _emit({"ok": True, "data": {"enabled": False, "removed": removed}}, EXIT_OK)
+    except autostart.AutostartError as exc:
+        return _fail("AUTOSTART_FAILED", str(exc), EXIT_ENV)
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="mascot", description="天选姬桌宠（重构版）")
     p.add_argument("--version", action="version", version=f"mascot {__version__}")
@@ -303,6 +326,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     r.set_defaults(func=cmd_run)
 
+    a = sub.add_parser("autostart", help="开机自启（HKCU Run，可随时关闭）")
+    a.add_argument("action", choices=["on", "off", "status"])
+    a.add_argument("--exe", help="自启目标 exe（默认当前可执行文件）")
+    a.set_defaults(func=cmd_autostart)
+
     c = sub.add_parser("ctl", help="控制运行中的实例")
     c.add_argument("action", choices=["status", "stop", "to-ball", "to-panel", "send"])
     c.add_argument("--text", default="", help="send 动作要发送的文本")
@@ -312,9 +340,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # 双击 exe（无参数）时当作 GUI 启动：默认 run，并藏掉随之弹出的控制台窗口。
+    # 同一个 exe 仍支持命令行子命令 —— 打包只出一个文件，用户只有一个入口。
+    args_in = list(sys.argv[1:]) if argv is None else list(argv)
+    launched_from_gui = not args_in
+    if launched_from_gui:
+        args_in = ["run"]
+        with contextlib.suppress(Exception):
+            from mascot_win.win32 import hide_console
+
+            hide_console()
     parser = build_parser()
     try:
-        args = parser.parse_args(argv)
+        args = parser.parse_args(args_in)
     except SystemExit as exc:  # argparse 的参数错误 -> 统一退出码 2
         return EXIT_ARGS if exc.code not in (0, None) else EXIT_OK
     # Windows 控制台默认 GBK：管道/互操作场景下会输出乱码，统一强制 UTF-8

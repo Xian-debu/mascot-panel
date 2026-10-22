@@ -120,6 +120,7 @@ def _declare_64bit_safe_prototypes() -> None:
     u.EnumWindows.argtypes = [ctypes.c_void_p, wt.LPARAM]
     u.GetDC.argtypes = [wt.HWND]
     u.GetDC.restype = wt.HDC
+    k.GetConsoleWindow.restype = wt.HWND
     u.ReleaseDC.argtypes = [wt.HWND, wt.HDC]
     u.DestroyWindow.argtypes = [wt.HWND]
     g.CreateCompatibleDC.argtypes = [wt.HDC]
@@ -334,6 +335,19 @@ def add_toolwindow(hwnd: int) -> None:
     """WS_EX_TOOLWINDOW：不出现在 Alt+Tab 与任务栏。"""
     _require_windows()
     _set_ex_style(hwnd, _get_ex_style(hwnd) | WS_EX_TOOLWINDOW)
+
+
+def console_hwnd() -> int:
+    """控制台窗口句柄；无控制台（pythonw/打包无控制台）返回 0。"""
+    _require_windows()
+    return int(_kernel32.GetConsoleWindow())
+
+
+def hide_console() -> None:
+    """双击启动时藏掉控制台窗口：同一个 exe 既能命令行用，又不闪黑框。"""
+    hwnd = console_hwnd()
+    if hwnd:
+        _user32.ShowWindow(wt.HWND(hwnd), SW_HIDE)
 
 
 def get_window_title(hwnd: int) -> str:

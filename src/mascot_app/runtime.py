@@ -454,14 +454,18 @@ class Runtime:
             self.post(Event.PET_LOST)
 
     def _poll_provider(self) -> None:
-        if not self.settings.allow_offline:
-            health = self.provider.health()
-            if not health.ok:
-                self._provider_detail = health.detail or health.reason_code
-                self.post(Event.PROVIDER_DOWN)
-            else:
-                self._provider_detail = ""
-                self.post(Event.PROVIDER_READY)
+        """后端健康探测：无论 allow_offline 与否都要探测并如实展示降级。
+
+        allow_offline 的语义是“后端不可用时仍让桌宠继续工作”，
+        不是“装作后端没问题”——早期实现反了，默认配置下永远看不到降级横幅。
+        """
+        health = self.provider.health()
+        if not health.ok:
+            self._provider_detail = health.detail or health.reason_code
+            self.post(Event.PROVIDER_DOWN)
+        else:
+            self._provider_detail = ""
+            self.post(Event.PROVIDER_READY)
 
     # ---- 入口 ---------------------------------------------------------------
 
