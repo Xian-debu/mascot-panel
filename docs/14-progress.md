@@ -1,11 +1,11 @@
 # 进度报告（自动维护，供明早阅读）
 
-## 明早先读：2026-10-22 夜间交付总结（更新至 M9）
+## 明早先读：2026-10-22 夜间交付总结（更新至 M10）
 
 **做完了什么**：按 docs/10-plan.md 推进 M0→M9，产品仓库 /root/mascot
 （骨架 → 纯逻辑层 → CLI/provider → CI/进度 → 部署 → M1 平台 spike → M2 运行时 → M3 渲染 →
 M4 面板与聊天 → M5 打包交付 → M6a/b/c 视觉对齐（像素时钟球/彗尾/品牌位）→ M7 托盘 →
-M8 冷启动 → M9 免打扰与多屏定位）。管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0015 自授权清单。
+M8 冷启动 → M9 免打扰与多屏定位 → M10 接上旧聊天后端）。管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0016 自授权清单。
 
 **现在能做什么**（Windows 上已装好）：
 ```
@@ -20,7 +20,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 注意：**开机自启当前是关闭的**，要开：`mascot.exe autostart on`（或托盘勾选）。
 
 **验证过的硬事实**：
-- Linux：ruff 0 / pyright 0 / pytest 87 passed；Windows：93 passed（1 skip）。
+- Linux：ruff 0 / pyright 0 / pytest 95 passed；Windows：93 passed（1 skip）；M10 验收 9/9 PASS。
 - 真机跟随 TX-Pet 窗口（961,459 / 1616,272，随窗口移动）、面板与环绕球同进程共存、ctl 全动作可用、
   托盘菜单与双击互切可用、安装/卸载/回滚/双跑/自启逐个跑过（evidence/m5-*、m6*、m7-*、m8-*、m9 验收输出）。
 - 冷启动 **进程创建→面板可见 0.70 s**（安装版 0.71–0.87 s），此前 4.34 s；DoD ≤2 s 已达成（docs/24）。
@@ -31,13 +31,14 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
    已写进 SG-0008；不认可直接删掉即可。
 2. **冷启动**已从 4.34 s 优化到 0.70 s（M8）。原“要不要为它花时间”的问题自动解决。
 3. **功能三档**（docs/12）：基线包能力已全部落地（阅读/操作分离、消息合并折叠、草稿、IME 安全、
-   代码块复制、托盘、自启、状态灯、免打扰）。只剩“流式输出”需要后端配合，属于下一阶段。
-4. **聊天后端仍是空档**：面板契约是 /api/pet/{health,history,send}，目前只有 scripts/dev-chat-backend.py
-   假后端；旧 deepseek-chat-rebuild 说另一套 /api/pet/{news,ask,status,trigger}（SSE），两套没接通。
-   下一步计划写一个 legacy 适配 provider（见 docs/26），接上旧后端就能真聊。
+   代码块复制、托盘、自启、状态灯、免打扰）。只剩“流式增量渲染”和“停止生成”未做。
+4. **聊天后端已接通旧契约**（M10）：`provider` 默认 `auto`——先探旧 deepseek-chat-rebuild 的
+   /api/pet/{status,news,ask}（SSE），不通再探新契约 /api/pet/{health,history,send}。你把旧后端
+   起在 127.0.0.1:8890，面板就能真聊（历史来自 /api/pet/news，回复由 SSE 分片拼接）。
+   注意：真旧后端需要 API Key，我今晚只用一个模拟旧后端的假服务验证过（scripts/verify_m10.py 9/9 PASS）。
 
 **已知缺口**：未签名（SmartScreen 可能提示）、无自动更新、旧版本目录不自动回收、
-面板立绘仍引用旧项目资源（未迁入本仓库）、无流式输出、消息不落盘、DND 与暂停不持久化。
+面板立绘仍引用旧项目资源（未迁入本仓库）、无流式增量输出/停止生成、消息不落盘、DND 与暂停不持久化、旧后端未用真实 API Key 实测。
 
 **仓库位置**：
 - 产品：/root/mascot（git；README 有结构与命令）
