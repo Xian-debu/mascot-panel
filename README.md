@@ -4,7 +4,7 @@
 旧实现 `E:\TX-Pet`（483 行单文件壳 + 919 行单文件 SPA，无版本控制）**冻结保留**，本仓库与其零共享代码。
 
 > 规划与决策记录在 `/root/mascot-admin`（管理仓库）。本仓库只承载产品代码。
-> 当前阶段：**M24 面板可拖动与位置记忆**（像素时钟球 + 环绕彗尾 + 面板品牌位 + 托盘 + 免打扰 + 冷启动 0.7s + legacy/auto 聊天后端 + 流式增量与停止生成 + config 写回与 dnd/暂停记忆 + 宠物没开时右下角常驻像素时钟球，可拖动、记忆位置、拖到边缘自动吸附、右键菜单可复位 + 独立面板 + 对话跨重启保留与 ctl clear-history + config 写回保留注释/未知键/表 + 版本目录列举/回收与真回滚 + 改配置热重载 + 历史条数可配置（history_limit 热生效）+ health 独立短超时（降级横幅 1.9s）+ clear-history 连后端 history 一起屏蔽 + 本地目录/zip 就地升级（mascot.exe update）+ 面板可拖标题栏、拖过记住位置并可复位（托盘/菜单/ctl reset-panel），见 docs/20–40）。
+> 当前阶段：**M25 待机球单击/双击手势**（像素时钟球 + 环绕彗尾 + 面板品牌位 + 托盘 + 免打扰 + 冷启动 0.7s + legacy/auto 聊天后端 + 流式增量与停止生成 + config 写回与 dnd/暂停记忆 + 宠物没开时右下角常驻像素时钟球，可拖动、记忆位置、拖到边缘自动吸附、右键菜单可复位 + 独立面板 + 对话跨重启保留与 ctl clear-history + config 写回保留注释/未知键/表 + 版本目录列举/回收与真回滚 + 改配置热重载 + 历史条数可配置（history_limit 热生效）+ health 独立短超时（降级横幅 1.9s）+ clear-history 连后端 history 一起屏蔽 + 本地目录/zip 就地升级（mascot.exe update）+ 面板可拖标题栏、拖过记住位置并可复位（托盘/菜单/ctl reset-panel）+ 待机球单击开面板、双击回右下角（350ms 双击窗口），见 docs/20–41）。
 > 交付形态：单 exe 双入口（双击=GUI，带参数=CLI，`mascot doctor/run/ctl/autostart`）；
 > M5 打包/安装/自启/回滚见 docs/19-m5-delivery.md。
 
@@ -30,7 +30,7 @@ tests/unit/         纯逻辑单测         tests/snapshot/  像素基线
 tests/platform/     Win32 平台测试     tests/contract/  provider 契约
 scripts/            deploy-win.sh（Windows 开发副本）、build-win.sh/install-win.sh/uninstall-win.sh（打包/安装/卸载）、
                     verify_m2.py/verify_m4.py/verify_m7.py/verify_m9.py/verify_m10.py/verify_m11.py/
-                    verify_m12.py/verify_m13.py/verify_m14.py/verify_m15.py/verify_m16.py/verify_m17.py/verify_m18.py/verify_m19.py/verify_m20.py/verify_m21.py/verify_m22.py/verify_m23.py/verify_m24.py、
+                    verify_m12.py/verify_m13.py/verify_m14.py/verify_m15.py/verify_m16.py/verify_m17.py/verify_m18.py/verify_m19.py/verify_m20.py/verify_m21.py/verify_m22.py/verify_m23.py/verify_m24.py/verify_m25.py、
                     dev-chat-backend.py/dev-legacy-backend.py、make_baselines.py、measure_start.py
 packaging/          PyInstaller 入口与 spec（entry.py / mascot.spec）
 ```

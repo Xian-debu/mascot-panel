@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from mascot_app import boot
+from mascot_core.click import DOUBLE, SINGLE, ClickGate
 from mascot_core.config import Settings, load_settings, merge_hot
 from mascot_core.contract import ChatProvider, Message, SendCancelled
 from mascot_core.geometry import Rect, Screen, angle_for_time, follow_rect, orbit_layout
@@ -348,6 +349,8 @@ class Runtime:
         self._ball_pos: tuple[int, int] | None = load_ball_pos()
         self._panel_pos: tuple[int, int] | None = load_panel_pos()
         self._panel_dirty = False
+        # 待机球单击/双击：单击开面板、双击回右下角（靠 350ms 时间窗区分，见 click.py）
+        self._click_gate = ClickGate()
         self._cleared_ids: set[str] = load_cleared_ids()
         # 免打扰：不自动弹出面板（仍跟随、仍可手动打开）；跨重启记住
         self._dnd = bool(flags.get("dnd", False))
@@ -739,6 +742,22 @@ class Runtime:
         x, y = self._idle_anchor((BALL_SIZE, BALL_SIZE))
         self._ball.move(x, y)
 
+    def _reset_ball_to_corner(self) -> None:
+        """忘掉拖过的位置，回到光标所在屏幕的右下角（托盘菜单/双击待机球共用）。"""
+        self._ball_pos = None
+        save_ball_pos(None)
+        self._render_idle_ball()
+        log.info("ball_reset", extra={"via": "menu_or_double_click"})
+
+    def _on_ball_click(self) -> None:
+        """球被单击（抬起且未拖动）：待机态要区分单击/双击，其余状态直接开面板。"""
+        if self._machine.state is not State.IDLE:
+            self.post(Event.CLICK_BALL)
+            return
+        if self._click_gate.click(time.monotonic() * 1000.0) == DOUBLE:
+            # 双击：不打开面板，把球送回右下角
+            self._reset_ball_to_corner()
+
     def _on_ball_drag(self, x: int, y: int) -> None:
         """拖动回调：夹到工作区内，并记住位置（下一帧重渲染不会弹回角落）。"""
         from mascot_win import win32
@@ -746,6 +765,8 @@ class Runtime:
         wx, wy, ww, wh = win32.work_area(x + BALL_SIZE // 2, y + BALL_SIZE // 2)
         x = min(max(wx, x), wx + ww - BALL_SIZE)
         y = min(max(wy, y), wy + wh - BALL_SIZE)
+        # 开始拖动说明这不是点击：丢掉挂起的单击，免得松手后 350ms 突然弹出面板
+        self._click_gate.reset()
         self._ball_pos = (x, y)
         if self._ball is not None:
             self._ball.move(x, y)
@@ -916,7 +937,7 @@ class Runtime:
             BALL_SIZE,
             click_through=False,
             start_hidden=True,
-            on_click=lambda: self.post(Event.CLICK_BALL),
+            on_click=self._on_ball_click,
         )
         boot.mark("ball_ready")
         self._create_tray()
@@ -947,6 +968,9 @@ class Runtime:
                 self._ball.pump()
                 self._drain_events()
                 self._drain_commands()
+                # 待机球的单击要等双击窗口过去才确认（见 click.py）
+                if self._click_gate.tick(now * 1000.0) == SINGLE:
+                    self.post(Event.CLICK_BALL)
 
                 # 配置文件每秒查一次：改了热重载（否则用户得重启才看到 fps 变化）
                 if now - last_config_check >= 1.0:
@@ -1045,9 +1069,7 @@ class Runtime:
         elif cmd == CMD_AUTOSTART:
             self.command("toggle_autostart")
         elif cmd == CMD_RESET_BALL:
-            self._ball_pos = None
-            save_ball_pos(None)
-            self._render_idle_ball()
+            self._reset_ball_to_corner()
         elif cmd == CMD_RESET_PANEL:
             self._reset_panel_pos()
         elif cmd == CMD_QUIT:

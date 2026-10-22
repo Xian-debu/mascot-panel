@@ -1,6 +1,6 @@
 # 进度报告（自动维护，供明早阅读）
 
-## 明早先读：2026-10-22 夜间交付总结（更新至 M24）
+## 明早先读：2026-10-22 夜间交付总结（更新至 M25）
 
 **做完了什么**：按 docs/10-plan.md 推进 M0→M13，产品仓库 /root/mascot
 （骨架 → 纯逻辑层 → CLI/provider → CI/进度 → 部署 → M1 平台 spike → M2 运行时 → M3 渲染 →
@@ -8,8 +8,8 @@ M4 面板与聊天 → M5 打包交付 → M6a/b/c 视觉对齐（像素时钟�
 M8 冷启动 → M9 免打扰与多屏定位 → M10 接上旧聊天后端 → M11 流式增量与停止生成 →
 M12 配置写回与开关持久化 → M13 待机形态 → M14 待机球像素时钟化/可拖动/记忆位置 →
 M15 聊天记录跨重启保留与清空 → M16 待机球右键菜单/边缘吸附/回到右下角 →
-M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真回滚 → M19 配置热重载 → M20 历史条数可配置 → M21 health 独立短超时 → M22 clear-history 对后端 history 也生效 → M23 就地升级命令 update → M24 面板可拖动与位置记忆）。
-管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023、M18 的 SG-0024、M19 的 SG-0025、M20 的 SG-0026、M21 的 SG-0027、M22 的 SG-0028、M23 的 SG-0029、M24 的 SG-0030 见当天提交）。
+M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真回滚 → M19 配置热重载 → M20 历史条数可配置 → M21 health 独立短超时 → M22 clear-history 对后端 history 也生效 → M23 就地升级命令 update → M24 面板可拖动与位置记忆 → M25 待机球单击/双击手势）。
+管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023、M18 的 SG-0024、M19 的 SG-0025、M20 的 SG-0026、M21 的 SG-0027、M22 的 SG-0028、M23 的 SG-0029、M24 的 SG-0030、M25 的 SG-0031 见当天提交）。
 
 **现在能做什么**（Windows 上已装好）：
 ```
@@ -27,7 +27,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 **验证过的硬事实**：
 - Linux：ruff 0 / pyright 0 / pytest 全绿；Windows：全量回归通过；M10 验收 9/9、M11 验收 15/15、
   M12 验收 16/16、M13 验收 10/10、M14 验收 9/9、M15 验收 14/14、M16 验收 7/7、
-  M17 验收 12/12、M18 验收 15/15、M19 验收 17/17、M20 验收 16/16、M21 验收 15/15、M22 验收 14/14、M23 验收 26/26、M24 验收 10/10 PASS。
+  M17 验收 12/12、M18 验收 15/15、M19 验收 17/17、M20 验收 16/16、M21 验收 15/15、M22 验收 14/14、M23 验收 26/26、M24 验收 10/10、M25 验收 11/11 PASS。
 - 真机跟随 TX-Pet 窗口（961,459 / 1616,272，随窗口移动）、面板与环绕球同进程共存、ctl 全动作可用、
   托盘菜单与双击互切可用、安装/卸载/回滚/双跑/自启逐个跑过（evidence/m5-*、m6*、m7-*、m8-*、m9 验收输出）。
 - 冷启动 **进程创建→面板可见 0.70 s**（安装版 0.71–0.87 s），此前 4.34 s；DoD ≤2 s 已达成（docs/24）。
@@ -46,7 +46,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
    注意：真旧后端需要 API Key，我今晚只用一个模拟旧后端的假服务验证过（scripts/verify_m10.py 9/9 PASS）。
 
 **已知缺口**：未签名（SmartScreen 可能提示）、无网络自动更新（M23 只支持本地目录/zip 升级）、
-旧后端未用真实 API Key 实测、待机球吸附只在松手时生效（无拖动中橡皮筋、无双击复位）、
+旧后端未用真实 API Key 实测、待机球单击开面板有 350ms 双击窗口延迟、
 面板拖动后是绝对钉住（不跟随宠物、换分辨率不按比例迁移）。
 
 **仓库位置**：
@@ -576,3 +576,14 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 坑：只加拖拽区会看到「拖不动 + 日志里 SetWindowPos ctypes 报错」，必须接管 window.move；拖动中写盘会拖慢拖动。
 - 遗留：钉住是绝对坐标（不跟随宠物、换分辨率按 clamped 处理不按比例迁移）；无相对偏移记忆；无双击标题栏还原。
 - 交付：docs/40-m24-panel-drag.md、evidence/m24-panel-moved.png；build-win.sh + install-win.sh 已跑，安装版 mascot.exe 8018798 字节（22:07），current.txt=0.1.0，安装版 doctor ok（provider 项 false 属预期，auto 后端未起）、versions 正常。
+
+### M25 待机球单击开面板 / 双击回右下角（2026-10-22 夜）
+
+- 痛点：已知缺口「待机球无双击复位」；双击是比右键菜单少两步的「把球放回去」手势。
+- 为什么不用 WM_LBUTTONDBLCLK：它要求窗口类带 CS_DBLCLKS，且系统仍先送一次普通单击消息——会出现「第一次单击已经打开面板，双击再复位」的错误顺序。
+- 新增纯逻辑 `src/mascot_core/click.py`：`ClickGate(window_ms=350)`，`click(now)` 第一次挂起、窗口内第二次返回 double；`tick(now)` 超时返回 single；`reset()` 放弃挂起。
+- runtime.py：球的 on_click 改为 `_on_ball_click`（非 IDLE 立刻 post CLICK_BALL，行为不变；IDLE 时喂 ClickGate，double 就 `_reset_ball_to_corner()`）；工作线程每轮 tick，single 才 post CLICK_BALL；`_on_ball_drag` 开头 reset（拖动不是点击）；托盘「小球回到右下角」与新方法共用。
+- 验收 scripts/verify_m25.py 11/11 PASS：球在角落 → 真鼠标拖到 789,469（ball_pos 落盘）→ 双击回 2408,1448 且 ball_pos 清空、状态仍 idle（面板没开）→ 随后单击正常打开面板（2048,942 488×634）、exit 0；回归 M13/M14/M15/M16/M24 全 ok=true。
+- 坑：双击不是一条独立消息，每次点击都要喂 ClickGate；拖动前不 reset 会在松手 350ms 后弹面板；pywebview 的 hidden=True 并没有真的藏窗口（启动时 ws_visible=true），验收不能用 IsWindowVisible 判「面板没打开」。
+- 遗留：单击开面板多 350ms 延迟（窗口常量，未做成配置）；轨道球无双击手势；启动时那个 WS_VISIBLE 但画不出内容的面板窗口是否拦点击未验证（留 M26）。
+- 交付：docs/41-m25-ball-double-click.md；build-win.sh + install-win.sh 已跑，安装版 mascot.exe 8021164 字节（23:28），current.txt=0.1.0，安装版 doctor ok（provider 项 false 属预期）。
