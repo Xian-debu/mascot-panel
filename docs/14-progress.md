@@ -30,9 +30,7 @@ uv run mascot ctl status   -> {"ok":true,"data":{"running":false,...}} exit=0
 
 **提交**：d3d11d7 init / 9872d14 core / 176c50c app / （CI 与本文档见下一提交）
 
-**已知缺口**
-- `mascot run` 仍是占位（exit 3 ENV_NOT_READY）：窗口接线在 M1/M2。
-- 尚未在 Windows Python 上跑过：下一节 M0.5 处理。
+（缺口已由 M0.5 / M1 关闭）
 ## M0.5 Windows 侧验证 — 完成（2026-10-22 夜）
 
 **做了什么**
@@ -53,3 +51,34 @@ venv/Scripts/python.exe -m mascot_app.cli doctor --offline
 **已知缺口**
 - 尚未创建任何 GUI 窗口：M1 才开始平台 spike。
 - 部署副本与源码可能版本漂移：每次改动后必须重跑 deploy-win.sh（后续 M5 用 PyInstaller 收口）。
+## M1 平台 spike — 完成（2026-10-22 夜）
+
+**做了什么**
+- `mascot_win/win32.py`：Win32 最小绑定（DPI、枚举、DWM 矩形、互斥体、点击穿透、move/destroy），
+  所有句柄显式 argtypes（64 位安全）。
+- `mascot_win/layered.py`：`LayeredWindow`（PIL → 预乘 BGRA → UpdateLayeredWindow），支持 alpha 与点击穿透。
+- `mascot_win/tracker.py`：`PetTracker`，按进程名/类名找宠物，连续 N 帧丢失才判丢。
+- `mascot_win/single.py`：命名互斥体单实例 + 诊断 pid 文件。
+- `mascot_render/ball.py`：PIL 画球（呼吸/琥珀等待色）与状态灯。
+- `scripts/spike_m1.py`：一次运行验证五个检查点并可截图存证。
+- `tests/platform/test_win32.py`：5 条平台测试。
+
+**怎么验证（Windows 侧实跑）**
+```
+pytest -m platform -> 5 passed in 0.21s
+spike_m1.py --seconds 7 ->
+  dpi per_monitor_v2 / screen 2560x1600 / dpi 144
+  single_instance first=true second=false
+  tracker found TX Mascot.exe HwndWrapper[...] rect(1616,272,180,180)
+  ball frames=518
+  webview alive_s=7.44
+  screenshot=evidence/m1-spike.png
+```
+截图里可以看到：**透明圆角面板 + 青色小球同时浮在浏览器之上**。
+
+**提交**：见 git log（win/render 模块、spike、平台测试、docs/15）
+
+**已知缺口**
+- 球是手动线程里的自绘窗口，还没接状态机与面板联动（M2）。
+- `mascot ctl stop` 仍是 no-op：IPC 在 M2 一并设计。
+- 面板透明区域目前是"整窗透明 + HTML 自绘圆角"，点击穿透策略还没做（M4）。

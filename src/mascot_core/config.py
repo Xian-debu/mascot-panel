@@ -43,7 +43,7 @@ class Settings(BaseSettings):
 
     # 宠物窗口（旧实现硬编码）
     pet_window_class: str = "TX Mascot"
-    pet_process_names: tuple[str, ...] = ("TXPet.exe", "TX Pets.exe")
+    pet_process_names: tuple[str, ...] = ("TX Mascot.exe", "TXPet.exe", "TX Pets.exe")
 
     # 环绕球
     ball_ratio: float = Field(default=0.34, gt=0.05, lt=1.0)
