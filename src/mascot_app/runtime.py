@@ -52,6 +52,42 @@ def _state_dir() -> Path:
     return base / "mascot" if local else base
 
 
+def _flags_path() -> Path:
+    return _state_dir() / "runtime.json"
+
+
+def load_flags() -> dict[str, bool]:
+    """读上次退出时的开关（免打扰/暂停）。文件坏了就当没有，绝不因此启动失败。"""
+    path = _flags_path()
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    flags: dict[str, bool] = {}
+    for key in ("dnd", "paused"):
+        value = raw.get(key)
+        if isinstance(value, bool):
+            flags[key] = value
+    return flags
+
+
+def save_flags(*, dnd: bool, paused: bool) -> None:
+    """原子写回开关；失败只记日志（写不了不应该影响桌宠本体）。"""
+    path = _flags_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(
+            json.dumps({"dnd": dnd, "paused": paused}, ensure_ascii=False) + chr(10),
+            encoding="utf-8",
+        )
+        tmp.replace(path)
+    except OSError as exc:
+        log.warning("flags: 写入失败 %s: %s", path, exc)
+
+
 TOKENS_PLACEHOLDER = "/*__TOKENS__*/"
 CSS_PLACEHOLDER = "/*__CSS__*/"
 JS_PLACEHOLDER = "//__JS__"
@@ -184,8 +220,10 @@ class Runtime:
         self._stream_text = ""
         self._stream_active = False
         self._cancel = threading.Event()
-        self._paused = False
-        self._dnd = False  # 免打扰：不自动弹出面板（仍跟随、仍可手动打开）
+        flags = load_flags()
+        self._paused = bool(flags.get("paused", False))
+        # 免打扰：不自动弹出面板（仍跟随、仍可手动打开）；跨重启记住
+        self._dnd = bool(flags.get("dnd", False))
         self._commands: list[str] = []
         self._tray: Any = None
 
@@ -637,6 +675,7 @@ class Runtime:
                 self._paused = not self._paused
                 log.info("pause: %s", "on" if self._paused else "off")
                 self._update_tray_tip()
+                save_flags(dnd=self._dnd, paused=self._paused)
                 self._write_state()
             elif name == "toggle_dnd":
                 self._dnd = not self._dnd
@@ -644,6 +683,7 @@ class Runtime:
                 if self._dnd:
                     self._hide_panel()
                 self._update_tray_tip()
+                save_flags(dnd=self._dnd, paused=self._paused)
                 self._write_state()
             elif name == "toggle_autostart":
                 self._toggle_autostart()

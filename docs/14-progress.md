@@ -351,3 +351,17 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
   Windows 全量回归通过；Linux ruff 0 / pyright 0 / pytest 98 passed。
   截图 `evidence/m11-streaming.png`、`evidence/m11-stopped.png`。细节见 `docs/27-m11-streaming.md`。
 - 遗留：增量不落盘（崩溃即丢）、取消是「停读」非「停写」、history 仍无真实时间戳。
+
+### M12 配置写回与运行态开关持久化（2026-10-22 深夜）
+
+- 痛点：配置只能读不能写（用户要调 fps / 后端地址只能手写 TOML）；DND 与暂停进程一退就丢
+  （docs/25 遗留）。
+- 新增 `mascot_core/configfile.py`：`coerce_value` + `Settings(**payload)` 校验后再原子落盘，
+  所以未知键、类型错、`fps=999` 都被 rc=2 拒绝且文件不动；CLI 加
+  `config path|show|get|set|unset`（`show` 同时给磁盘值与生效值，用于排查环境变量覆盖）。
+- 新增 `%LOCALAPPDATA%/mascot/runtime.json`（`{"dnd","paused"}`），`Runtime` 启动时读取、
+  托盘与 `ctl` 两条切换路径都写回；读坏/写失败只降级不阻塞启动。
+  与 `config.toml` 分开：前者是"上次运行状态"，后者是"用户意图"。
+- 验收：`scripts/verify_m12.py` 16 项全过（配置写回/拒绝非法/重启后 dnd+paused 仍为 true）；
+  Linux ruff 0 / pyright 0 / pytest 全绿（新增 12 项单测）。细节见 `docs/28-m12-config.md`。
+- 遗留：配置只支持扁平键、写回会丢注释、无热重载、窗口位置未持久化。

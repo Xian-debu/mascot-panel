@@ -20,6 +20,7 @@ from pathlib import Path
 from mascot_app import __version__, boot
 from mascot_app.logging_setup import setup_logging
 from mascot_app.providers import make_provider
+from mascot_core import configfile
 from mascot_core.config import Settings, default_config_path, load_settings
 
 EXIT_OK = 0
@@ -319,6 +320,64 @@ def cmd_autostart(args: argparse.Namespace) -> int:
         return _fail("AUTOSTART_FAILED", str(exc), EXIT_ENV)
 
 
+def cmd_config(args: argparse.Namespace) -> int:
+    """配置文件的读/写/路径。写回只动一个键，其它键原样保留。"""
+    path = Path(args.config) if args.config else default_config_path()
+    action = args.action
+    try:
+        if action == "path":
+            return _emit({"ok": True, "data": {"path": str(path), "exists": path.is_file()}}, EXIT_OK)
+        if action == "show":
+            settings = load_settings(path if path.is_file() else None)
+            return _emit(
+                {
+                    "ok": True,
+                    "data": {
+                        "path": str(path),
+                        "exists": path.is_file(),
+                        "file": configfile.read_config_file(path),
+                        "effective": settings.model_dump(mode="json"),
+                    },
+                },
+                EXIT_OK,
+            )
+        if action == "get":
+            key = args.key or ""
+            if key not in Settings.model_fields:
+                return _fail("UNKNOWN_KEY", "unknown config key: " + key, EXIT_ARGS)
+            settings = load_settings(path if path.is_file() else None)
+            value = getattr(settings, key)
+            return _emit({"ok": True, "data": {"key": key, "value": _jsonable(value)}}, EXIT_OK)
+        if action == "set":
+            key = args.key or ""
+            raw = args.value
+            if raw is None:
+                return _fail("MISSING_VALUE", "config set needs a value", EXIT_ARGS)
+            target, value = configfile.set_config_value(key, raw, path)
+            return _emit(
+                {"ok": True, "data": {"path": str(target), "key": key, "value": _jsonable(value),
+                                      "restart_required": True}},
+                EXIT_OK,
+            )
+        if action == "unset":
+            key = args.key or ""
+            removed = configfile.unset_config_value(key, path)
+            return _emit({"ok": True, "data": {"path": str(path), "key": key, "removed": removed}}, EXIT_OK)
+    except ValueError as exc:
+        return _fail("BAD_VALUE", str(exc), EXIT_ARGS)
+    except OSError as exc:
+        return _fail("WRITE_FAILED", str(exc), EXIT_FAIL)
+    return _fail("BAD_ACTION", "unknown config action", EXIT_ARGS)
+
+
+def _jsonable(value: object) -> object:
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, tuple):
+        return list(value)
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="mascot", description="天选姬桌宠（重构版）")
     p.add_argument("--version", action="version", version=f"mascot {__version__}")
@@ -352,6 +411,13 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("action", choices=["on", "off", "status"])
     a.add_argument("--exe", help="自启目标 exe（默认当前可执行文件）")
     a.set_defaults(func=cmd_autostart)
+
+    cf = sub.add_parser("config", help="配置文件：查看 / 修改 / 路径")
+    cf.add_argument("action", choices=["path", "show", "get", "set", "unset"])
+    cf.add_argument("key", nargs="?", help="配置键（Settings 字段名）")
+    cf.add_argument("value", nargs="?", help="set 的新值")
+    cf.add_argument("--config", help="显式配置文件路径")
+    cf.set_defaults(func=cmd_config)
 
     c = sub.add_parser("ctl", help="控制运行中的实例")
     c.add_argument(
