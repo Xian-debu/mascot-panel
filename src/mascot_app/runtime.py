@@ -101,9 +101,13 @@ def load_ball_pos() -> tuple[int, int] | None:
     return None
 
 
-def save_ball_pos(pos: tuple[int, int]) -> None:
+def save_ball_pos(pos: tuple[int, int] | None) -> None:
+    """记住/清除待机球位置；None 表示回到默认的右下角。"""
     raw = _read_runtime()
-    raw["ball_pos"] = [int(pos[0]), int(pos[1])]
+    if pos is None:
+        raw.pop("ball_pos", None)
+    else:
+        raw["ball_pos"] = [int(pos[0]), int(pos[1])]
     _write_runtime(raw)
 
 
@@ -218,6 +222,7 @@ CMD_PAUSE = 1003
 CMD_AUTOSTART = 1004
 CMD_QUIT = 1005
 CMD_DND = 1006
+CMD_RESET_BALL = 1007
 
 _STATE_LABEL = {
     "idle": "待机",
@@ -475,6 +480,7 @@ class Runtime:
             self._orbit_t0 = time.monotonic()
             if self._ball is not None:
                 self._ball.disable_drag()
+                self._ball.enable_context_menu(lambda: [], lambda _cmd: None)
             return
         if effect == STOP_FRAMES:
             self._frames = False
@@ -595,6 +601,7 @@ class Runtime:
         half = BALL_SIZE // 2
         self._ball.set_hit_circle(half, half, half + 2)
         self._ball.enable_drag(self._on_ball_drag, self._on_ball_drag_end)
+        self._ball.enable_context_menu(self._build_tray_menu, self._on_tray_command)
         x, y = self._idle_anchor((BALL_SIZE, BALL_SIZE))
         self._ball.move(x, y)
 
@@ -610,9 +617,25 @@ class Runtime:
             self._ball.move(x, y)
 
     def _on_ball_drag_end(self, x: int, y: int, moved: bool) -> None:
-        if moved:
-            self._ball_pos = (x, y)
-            save_ball_pos((x, y))
+        if not moved:
+            return
+        # 拖到屏幕边缘附近就贴边（留 8px 缝），避免球悬在边缘外几像素
+        from mascot_win import win32
+
+        wx, wy, ww, wh = win32.work_area(x + BALL_SIZE // 2, y + BALL_SIZE // 2)
+        snap = 12
+        if abs(x - wx) <= snap:
+            x = wx + 8
+        elif abs((wx + ww) - (x + BALL_SIZE)) <= snap:
+            x = wx + ww - BALL_SIZE - 8
+        if abs(y - wy) <= snap:
+            y = wy + 8
+        elif abs((wy + wh) - (y + BALL_SIZE)) <= snap:
+            y = wy + wh - BALL_SIZE - 8
+        self._ball_pos = (x, y)
+        if self._ball is not None:
+            self._ball.move(x, y)
+        save_ball_pos((x, y))
 
     def _place_panel(self, *, force: bool = False) -> None:
         from mascot_win import win32
@@ -807,6 +830,7 @@ class Runtime:
             (CMD_DND, "免打扰", self._dnd),
             (CMD_AUTOSTART, "开机自启", _autostart_enabled()),
             (0, "", False),
+            (CMD_RESET_BALL, "小球回到右下角", False),
             (CMD_QUIT, "退出", False),
         ]
 
@@ -821,6 +845,10 @@ class Runtime:
             self.command("toggle_dnd")
         elif cmd == CMD_AUTOSTART:
             self.command("toggle_autostart")
+        elif cmd == CMD_RESET_BALL:
+            self._ball_pos = None
+            save_ball_pos(None)
+            self._render_idle_ball()
         elif cmd == CMD_QUIT:
             self.command("quit")
 

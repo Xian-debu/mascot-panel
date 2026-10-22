@@ -107,8 +107,24 @@ def test_tray_menu_has_expected_items() -> None:
     rt = make_runtime()
     menu = rt._build_tray_menu()  # noqa: SLF001
     labels = [label for _id, label, _checked in menu if label]
-    assert labels == ["显示面板", "收进小球", "暂停跟随", "免打扰", "开机自启", "退出"]
+    assert labels == [
+        "显示面板",
+        "收进小球",
+        "暂停跟随",
+        "免打扰",
+        "开机自启",
+        "小球回到右下角",
+        "退出",
+    ]
     assert sum(1 for _id, label, _c in menu if not label) == 2  # 两条分隔线
+
+
+def test_reset_ball_clears_saved_position() -> None:
+    rt = make_runtime()
+    from mascot_app.runtime import CMD_RESET_BALL
+
+    rt._on_tray_command(CMD_RESET_BALL)  # noqa: SLF001
+    assert rt._ball_pos is None  # noqa: SLF001
 
 
 def test_toggle_pause_updates_snapshot_and_tip() -> None:

@@ -1,14 +1,14 @@
 # 进度报告（自动维护，供明早阅读）
 
-## 明早先读：2026-10-22 夜间交付总结（更新至 M15）
+## 明早先读：2026-10-22 夜间交付总结（更新至 M16）
 
 **做完了什么**：按 docs/10-plan.md 推进 M0→M13，产品仓库 /root/mascot
 （骨架 → 纯逻辑层 → CLI/provider → CI/进度 → 部署 → M1 平台 spike → M2 运行时 → M3 渲染 →
 M4 面板与聊天 → M5 打包交付 → M6a/b/c 视觉对齐（像素时钟球/彗尾/品牌位）→ M7 托盘 →
 M8 冷启动 → M9 免打扰与多屏定位 → M10 接上旧聊天后端 → M11 流式增量与停止生成 →
 M12 配置写回与开关持久化 → M13 待机形态 → M14 待机球像素时钟化/可拖动/记忆位置 →
-M15 聊天记录跨重启保留与清空）。
-管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021 见当天提交）。
+M15 聊天记录跨重启保留与清空 → M16 待机球右键菜单/边缘吸附/回到右下角）。
+管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022 见当天提交）。
 
 **现在能做什么**（Windows 上已装好）：
 ```
@@ -24,7 +24,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 
 **验证过的硬事实**：
 - Linux：ruff 0 / pyright 0 / pytest 全绿；Windows：全量回归通过；M10 验收 9/9、M11 验收 15/15、
-  M12 验收 16/16、M13 验收 10/10、M14 验收 9/9、M15 验收 14/14 PASS。
+  M12 验收 16/16、M13 验收 10/10、M14 验收 9/9、M15 验收 14/14、M16 验收 7/7 PASS。
 - 真机跟随 TX-Pet 窗口（961,459 / 1616,272，随窗口移动）、面板与环绕球同进程共存、ctl 全动作可用、
   托盘菜单与双击互切可用、安装/卸载/回滚/双跑/自启逐个跑过（evidence/m5-*、m6*、m7-*、m8-*、m9 验收输出）。
 - 冷启动 **进程创建→面板可见 0.70 s**（安装版 0.71–0.87 s），此前 4.34 s；DoD ≤2 s 已达成（docs/24）。
@@ -44,7 +44,8 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 
 **已知缺口**：未签名（SmartScreen 可能提示）、无自动更新、旧版本目录不自动回收、
 面板立绘仍引用旧项目资源（未迁入本仓库）、旧后端未用真实 API Key 实测、
-配置写回会丢注释且无热重载、历史只存最近 50 条且清空仅限本地、待机球无右键菜单与边缘吸附。
+配置写回会丢注释且无热重载、历史只存最近 50 条且清空仅限本地、
+待机球吸附只在松手时生效（无拖动中橡皮筋、无双击复位）。
 
 **仓库位置**：
 - 产品：/root/mascot（git；README 有结构与命令）
@@ -431,3 +432,23 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 遗留：历史只存文本与最近 50 条，无文件轮转；清空仅本地；后端自身历史不在范围内。
 - 交付：`dist/mascot/mascot.exe` 重建，`install-win.sh` 已装到
   `C:/Users/ZYX/AppData/Local/mascot/app/0.1.0`（`current.txt=0.1.0`），安装版 doctor 通过。
+
+### M16 待机球：右键菜单 + 边缘吸附 + 回到右下角（2026-10-22 深夜）
+
+- 痛点：M14 遗留「拖到边缘悬空、无吸附」「待机球无右键菜单」，只能用托盘图标操作。
+- 边缘吸附：`_on_ball_drag_end` 按松手点所在屏的 `work_area` 判断，`snap=12`，
+  左/上贴 8px、右/下对齐工作区边缘再退 8px；吸附结果立即落盘，重启仍在贴边处。
+- 右键菜单：`LayeredWindow.enable_context_menu(builder, on_command)` + `_popup_menu()`
+  （`CreatePopupMenu` + `TrackPopupMenu(TPM_RIGHTBUTTON|TPM_RETURNCMD)`，选择以返回值回调）；
+  球直接复用托盘菜单的同源构造器 `_build_tray_menu` / 分发器 `_on_tray_command`。
+  新增 `CMD_RESET_BALL=1007`「小球回到右下角」；轨道态球把菜单换成空构造器，右键不弹。
+- `save_ball_pos` 支持 `None`：复位时从 `runtime.json` 删掉 `ball_pos` 键（而非写假坐标）。
+- 验收：`scripts/verify_m16.py` 7 项全过（贴边 x=2424 = 2560-128-8、菜单窗口出现、
+  键盘选「回到右下角」回到 2408,1448、`ball_pos` 键被清）。`verify_m13.py` 10/10、
+  `verify_m14.py` 9/9、`verify_m15.py` 14/14 回归通过。Linux ruff 0 / pyright 0 / pytest 全绿。
+  截图 `evidence/m16-menu.png`、`evidence/m16-edge-snap.png`。细节见 `docs/32-m16-ball-menu.md`。
+- 关键坑：弹菜单前必须 `SetForegroundWindow`，否则点空白收不起来；`TPM_RETURNCMD` 已用返回值
+  给选择，不能再挂 `WM_COMMAND`（会双触发）。
+- 遗留：吸附只在松手时生效（无拖动中橡皮筋）、无双击复位、面板 idle 位置仍不跟随球、菜单无图标。
+- 交付：`dist/mascot/mascot.exe` 重建（7996831 字节 / 7.7M，21:18），`install-win.sh` 已装到
+  `C:/Users/ZYX/AppData/Local/mascot/app/0.1.0`（7996831 字节，`current.txt=0.1.0`），安装版 doctor 通过。

@@ -93,6 +93,9 @@ class LayeredWindow:
         self._dragging = False
         self._drag_moved = False
         self._drag_start: tuple[int, int, int, int] = (0, 0, 0, 0)
+        # 右键菜单：只有待机球启用（与托盘同一份菜单项 + 额外的"回到右下角"）
+        self._menu_builder: Callable[[], list[tuple[int, str, bool]]] | None = None
+        self._menu_command: Callable[[int], None] | None = None
         if not start_hidden:
             win32._user32.ShowWindow(wt.HWND(self.hwnd), win32.SW_SHOWNOACTIVATE)
 
@@ -127,6 +130,9 @@ class LayeredWindow:
             if self._drag_moved and self._on_drag is not None:
                 self._on_drag(wx + dx, wy + dy)
             return 0
+        if msg == win32.WM_RBUTTONUP and self._menu_builder is not None:
+            self._popup_menu()
+            return 0
         if msg == win32.WM_LBUTTONUP:
             if self._dragging:
                 # 抬起既可能是"点一下"，也可能是"拖完松手"：用位移阈值区分，
@@ -147,6 +153,49 @@ class LayeredWindow:
                 wt.HWND(hwnd), wt.UINT(msg), wt.WPARAM(wparam), wt.LPARAM(lparam)
             )
         )
+
+    def _popup_menu(self) -> None:
+        """在光标处弹出菜单；TrackPopupMenu(TPM_RETURNCMD) 阻塞到用户选择或点空白。"""
+        builder = self._menu_builder
+        if builder is None:
+            return
+        menu = win32._user32.CreatePopupMenu()
+        if not menu:
+            return
+        try:
+            for item_id, label, checked in builder():
+                if not label:
+                    win32._user32.AppendMenuW(menu, win32.MF_SEPARATOR, 0, None)
+                    continue
+                flags = win32.MF_STRING | (win32.MF_CHECKED if checked else 0)
+                win32._user32.AppendMenuW(menu, flags, item_id, label)
+            x, y = win32.cursor_pos()
+            # 菜单要能"点别处收起"，需要前台窗口；失败也不影响菜单本身弹出
+            win32._user32.SetForegroundWindow(wt.HWND(self.hwnd))
+            cmd = win32._user32.TrackPopupMenu(
+                menu,
+                win32.TPM_RIGHTBUTTON | win32.TPM_RETURNCMD,
+                x,
+                y,
+                0,
+                wt.HWND(self.hwnd),
+                None,
+            )
+            # 让菜单消失后窗口不再占前台（与托盘菜单同一处理）
+            win32._user32.PostMessageW(wt.HWND(self.hwnd), win32.WM_NULL, 0, 0)
+            if cmd and self._menu_command is not None:
+                self._menu_command(int(cmd))
+        finally:
+            win32._user32.DestroyMenu(menu)
+
+    def enable_context_menu(
+        self,
+        builder: Callable[[], list[tuple[int, str, bool]]],
+        on_command: Callable[[int], None],
+    ) -> None:
+        """右键菜单：builder 返回 [(命令 id, 文案, 是否勾选)]，选择后回调 on_command。"""
+        self._menu_builder = builder
+        self._menu_command = on_command
 
     def _inside_hit_circle(self, lparam: int) -> bool:
         assert self._hit_circle is not None
