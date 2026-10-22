@@ -263,3 +263,14 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 验证：Linux 84 passed / ruff 0 / pyright 0；Windows 84 passed（1 skip）；
   真机环绕态截图 `evidence/m6-orbital.png`；快照 13 个用例。
 - 细节与下一步（彗尾、面板美术）见 `docs/20-m6-visual.md`。
+
+### M6b 环绕整帧（2026-10-22 夜）
+
+- `mascot_core.geometry.orbit_layout()`：球径 / 轨道半径 / 整帧窗口三个数可单测；
+  `ball_ratio` 语义回到“球半径比例”（与原版 `BALL_RATIO` 一致）。
+- 环绕窗口改为以宠物为中心的大方窗，球 + 彗尾同帧绘制（`render_orbit_frame`）。
+- 点击穿透用 `WM_NCHITTEST` + 命中圆：球内 `HTCLIENT`，球外 `HTTRANSPARENT`；
+  命中判断用自记坐标而不是 `GetWindowRect`（异步移动会拿到旧矩形，平台测试复现过）。
+- 窗口尺寸变化走 `SetWindowPos` 而不是缩放位图（保像素边缘）。
+- 验证：Linux ruff 0 / pyright 0 / pytest 全绿；Windows 全套全绿；
+  真机截图 `evidence/m6b-orbital.png`。细节见 `docs/21-m6b-orbit.md`。

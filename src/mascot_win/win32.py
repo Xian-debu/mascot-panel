@@ -30,7 +30,7 @@ WM_LBUTTONUP = 0x0202
 SW_HIDE = 0
 SW_SHOWNOACTIVATE = 4
 SWP_ASYNCWINDOWPOS = 0x4000
-SW_SHOWNOACTIVATE = 4
+SWP_NOMOVE = 0x0002
 SWP_NOACTIVATE = 0x0010
 SWP_NOSIZE = 0x0001
 SWP_NOZORDER = 0x0004
@@ -44,6 +44,7 @@ PM_REMOVE = 0x0001
 WM_DESTROY = 0x0002
 WM_NCHITTEST = 0x0084
 HTTRANSPARENT = -1
+HTCLIENT = 1
 DWMWA_EXTENDED_FRAME_BOUNDS = 9
 ERROR_ALREADY_EXISTS = 183
 
@@ -374,6 +375,14 @@ def find_window(title: str, *, exact: bool = True, timeout_s: float = 0.0) -> in
         if time.monotonic() >= deadline:
             return 0
         time.sleep(0.05)
+
+
+def send_message(hwnd: int, msg: int, wparam: int = 0, lparam: int = 0) -> int:
+    """同步 SendMessage：验收脚本用它直接问窗口 WM_NCHITTEST 的答案。"""
+    _require_windows()
+    _user32.SendMessageW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
+    _user32.SendMessageW.restype = ctypes.c_ssize_t
+    return int(_user32.SendMessageW(wt.HWND(hwnd), wt.UINT(msg), wt.WPARAM(wparam), wt.LPARAM(lparam)))
 
 
 def post_close(hwnd: int) -> None:

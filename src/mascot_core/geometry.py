@@ -119,3 +119,25 @@ def angle_for_time(t: float, period_s: float, speed: float = 1.0) -> float:
     if period_s <= 0:
         raise ValueError("period_s must be > 0")
     return (2 * math.pi * t * speed) / period_s
+
+@dataclass(frozen=True, slots=True)
+class OrbitLayout:
+    """环绕态几何：球半径、轨道半径、整帧窗口边长（都是物理像素）。"""
+
+    ball_r: int
+    orbit_r: int
+    window: int
+
+
+def orbit_layout(
+    pet: Rect, ball_ratio: float = 0.34, gap: int = 10, pad: int = 6
+) -> OrbitLayout:
+    """原版公式：球半径按宠物宽度比例，轨道要让球完全绕在宠物外圈。
+
+    window 是正方形整帧窗口边长：轨道直径 + 两侧球 + 一点余量，
+    这样彗尾和球都能画进同一张 UpdateLayeredWindow 里。
+    """
+    ball_r = max(30, int(pet.w * ball_ratio))
+    orbit_r = max(150, pet.w // 2 + ball_r + gap)
+    window = 2 * (orbit_r + ball_r + pad)
+    return OrbitLayout(ball_r=ball_r, orbit_r=orbit_r, window=window)

@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import math
 import os
 import threading
 import time
@@ -21,7 +22,7 @@ from typing import Any
 
 from mascot_core.config import Settings
 from mascot_core.contract import ChatProvider, Message
-from mascot_core.geometry import Rect, Screen, angle_for_time, ball_pos, follow_rect
+from mascot_core.geometry import Rect, Screen, angle_for_time, follow_rect, orbit_layout
 from mascot_core.state import (
     CLEAR_DEGRADED,
     HIDE_BALL,
@@ -345,7 +346,8 @@ class Runtime:
     # ---- 帧 ---------------------------------------------------------------
 
     def _render_frame(self, t: float) -> None:
-        from mascot_render.clock import render_clock
+        """环绕态整帧：彗尾 + 像素时钟球，窗口盖住整个轨道，只有球可点。"""
+        from mascot_render.clock import render_orbit_frame
 
         if self._ball is None:
             return
@@ -354,13 +356,23 @@ class Runtime:
             return
         pet_rect = Rect(pet.x, pet.y, pet.w, pet.h)
         angle = angle_for_time(t, self.settings.orbit_period_s, self.settings.orbit_speed)
-        # 像素时钟球（原版视觉基线）：时间由渲染器自己读系统时钟。
-        image = render_clock(BALL_SIZE, stuck=self._machine.state is State.DEGRADED)
-        x, y = ball_pos(
-            angle, pet_rect, self.settings.ball_ratio, self.settings.orbit_gap, BALL_SIZE
+        layout = orbit_layout(pet_rect, self.settings.ball_ratio, self.settings.orbit_gap)
+        image = render_orbit_frame(
+            layout.window,
+            ball_r=layout.ball_r,
+            orbit_r=layout.orbit_r,
+            angle_deg=math.degrees(angle),
+            stuck=self._machine.state is State.DEGRADED,
         )
+        cx, cy = pet_rect.center
+        half = layout.window / 2
         self._ball.render(image)
-        self._ball.move(x, y)
+        self._ball.set_hit_circle(
+            round(half + layout.orbit_r * math.cos(angle)),
+            round(half + layout.orbit_r * math.sin(angle)),
+            layout.ball_r + 4,
+        )
+        self._ball.move(round(cx - half), round(cy - half))
 
     # ---- 工作线程 -----------------------------------------------------------
 

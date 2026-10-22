@@ -69,3 +69,27 @@ def test_layered_window_render_move_destroy() -> None:
     finally:
         win.destroy()
     assert win.hwnd == 0
+
+
+def test_layered_window_hit_circle_controls_click_through() -> None:
+    from PIL import Image
+
+    from mascot_win import win32
+    from mascot_win.layered import LayeredWindow
+
+    win = LayeredWindow(200, 200, click_through=False, start_hidden=True)
+    try:
+        win.move(300, 300)
+        win.render(Image.new("RGBA", (200, 200), (0, 0, 0, 0)))
+        win.set_hit_circle(100, 100, 30)
+
+        def at(client_x: int, client_y: int) -> int:
+            lparam = ((client_y + 300) & 0xFFFF) << 16 | ((client_x + 300) & 0xFFFF)
+            return win32.send_message(win.hwnd, win32.WM_NCHITTEST, 0, lparam)
+
+        assert at(100, 100) == win32.HTCLIENT       # 球心可点
+        assert at(100, 125) == win32.HTCLIENT       # 半径内
+        assert at(10, 10) == win32.HTTRANSPARENT    # 角落穿透
+        assert at(100, 160) == win32.HTTRANSPARENT  # 球外穿透
+    finally:
+        win.destroy()

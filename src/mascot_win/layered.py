@@ -83,6 +83,9 @@ class LayeredWindow:
             raise OSError("CreateWindowExW failed")
         self.hwnd = int(hwnd)
         self._saved: Image.Image | None = None
+        # 命中圆：整帧窗口很大（轨道直径），只有球体所在圆可点，其余穿透
+        self._hit_circle: tuple[int, int, int] | None = None
+        self._pos: tuple[int, int] = (0, 0)
         if not start_hidden:
             win32._user32.ShowWindow(wt.HWND(self.hwnd), win32.SW_SHOWNOACTIVATE)
 
@@ -90,8 +93,14 @@ class LayeredWindow:
         if msg == win32.WM_DESTROY:
             win32._user32.PostQuitMessage(0)
             return 0
-        if msg == win32.WM_NCHITTEST and self._click_through:
-            return win32.HTTRANSPARENT
+        if msg == win32.WM_NCHITTEST:
+            if self._click_through:
+                return win32.HTTRANSPARENT
+            if self._hit_circle is not None and self._inside_hit_circle(lparam):
+                return win32.HTCLIENT
+            if self._hit_circle is not None:
+                return win32.HTTRANSPARENT
+            return win32.HTCLIENT
         if msg == win32.WM_LBUTTONUP:
             if self._on_click is not None:
                 self._on_click()
@@ -102,12 +111,38 @@ class LayeredWindow:
             )
         )
 
+    def _inside_hit_circle(self, lparam: int) -> bool:
+        assert self._hit_circle is not None
+        x = ctypes.c_short(lparam & 0xFFFF).value
+        y = ctypes.c_short((lparam >> 16) & 0xFFFF).value
+        wx, wy = self._pos
+        cx, cy, r = self._hit_circle
+        dx = x - (wx + cx)
+        dy = y - (wy + cy)
+        return dx * dx + dy * dy <= r * r
+
+    def set_hit_circle(self, cx: int, cy: int, radius: int) -> None:
+        """窗口内只有这个圆可点（球心 + 球半径），其余区域点击穿透。"""
+        self._hit_circle = (int(cx), int(cy), int(radius))
+
+    def clear_hit_circle(self) -> None:
+        self._hit_circle = None
+
+    def _resize_window(self, width: int, height: int) -> None:
+        win32._user32.SetWindowPos(
+            wt.HWND(self.hwnd), 0, 0, 0, width, height,
+            win32.SWP_NOMOVE | win32.SWP_NOZORDER | win32.SWP_NOACTIVATE,
+        )
+        self.width = width
+        self.height = height
+
     def render(self, image: Image.Image) -> None:
         """image 必须是 RGBA；内部做预乘（UpdateLayeredWindow 要求预乘 alpha）。"""
         if image.mode != "RGBA":
             image = image.convert("RGBA")
         if image.size != (self.width, self.height):
-            image = image.resize((self.width, self.height), Image.Resampling.LANCZOS)
+            # 环绕态窗口随宠物大小变化：跟随图像尺寸重设窗口，不做缩放
+            self._resize_window(image.width, image.height)
         self._saved = image
         r, g, b, a = image.split()
         prem = Image.merge(
@@ -148,6 +183,7 @@ class LayeredWindow:
             win32._user32.ReleaseDC(0, screen_dc)
 
     def move(self, x: int, y: int) -> None:
+        self._pos = (int(x), int(y))
         win32.move_window(self.hwnd, int(x), int(y))
 
     def set_click_through(self, enabled: bool) -> None:

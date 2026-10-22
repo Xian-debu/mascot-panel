@@ -4,8 +4,9 @@
 旧实现 `E:\TX-Pet`（483 行单文件壳 + 919 行单文件 SPA，无版本控制）**冻结保留**，本仓库与其零共享代码。
 
 > 规划与决策记录在 `/root/mascot-admin`（管理仓库）。本仓库只承载产品代码。
-> 当前阶段：**M5 完成**（PyInstaller onedir 打包 + 安装/自启/回滚/双跑，见 docs/19-m5-delivery.md）。
-> 交付形态：单 exe 双入口（双击=GUI，带参数=CLI，`mascot doctor/run/ctl/autostart`）。
+> 当前阶段：**M6 视觉对齐**（像素时钟球 + 环绕整帧/彗尾，见 docs/20-m6-visual.md、docs/21-m6b-orbit.md）。
+> 交付形态：单 exe 双入口（双击=GUI，带参数=CLI，`mascot doctor/run/ctl/autostart`）；
+> M5 打包/安装/自启/回滚见 docs/19-m5-delivery.md。
 
 ## 它是什么
 

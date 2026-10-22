@@ -11,6 +11,7 @@ from mascot_core.geometry import (
     ball_pos,
     clamp_rect,
     follow_rect,
+    orbit_layout,
     orbit_radius,
 )
 
@@ -87,3 +88,25 @@ def test_angle_for_time() -> None:
     assert angle_for_time(6, 12, speed=2) == pytest.approx(2 * math.pi)
     with pytest.raises(ValueError):
         angle_for_time(1, 0)
+
+
+def test_orbit_layout_uses_pet_width() -> None:
+    pet = Rect(0, 0, 180, 180)
+    layout = orbit_layout(pet)
+    assert layout.ball_r == 61  # 180 * 0.34 = 61.2 -> 61
+    assert layout.orbit_r == max(150, 90 + 61 + 10)
+    assert layout.window == 2 * (layout.orbit_r + layout.ball_r + 6)
+
+
+def test_orbit_layout_has_minimums_for_small_pets() -> None:
+    layout = orbit_layout(Rect(0, 0, 60, 60))
+    assert layout.ball_r == 30
+    assert layout.orbit_r == 150
+    assert layout.window == 2 * (150 + 30 + 6)
+
+
+def test_orbit_layout_scales_with_pet() -> None:
+    small = orbit_layout(Rect(0, 0, 120, 120))
+    big = orbit_layout(Rect(0, 0, 320, 320))
+    assert big.ball_r > small.ball_r
+    assert big.window > small.window
