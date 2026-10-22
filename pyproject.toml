@@ -14,9 +14,9 @@ dependencies = [
 [project.scripts]
 mascot = "mascot_app.cli:main"
 
+# 只保留"读代码"用的静态检查；行为验证靠真机自用，不写一次性验收脚本（见 AGENTS.md）
 [dependency-groups]
 dev = [
-  "pytest>=8",
   "ruff>=0.6",
   "pyright>=1.1.380",
 ]
@@ -28,16 +28,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/mascot_core", "src/mascot_win", "src/mascot_render", "src/mascot_app"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["src"]
-addopts = "-q"
-markers = ["platform: needs Windows desktop", "contract: provider contract"]
-
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["src", "tests"]
+src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]

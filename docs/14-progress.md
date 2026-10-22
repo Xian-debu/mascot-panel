@@ -1,5 +1,9 @@
 # 进度报告（自动维护，供明早阅读）
 
+> **2026-10-23 清理与转向（最新）**：用户 m05718 叫停功能推进。已删除全部 30 个 `scripts/verify_m*.py`、探针/假后端脚本、`tests/`（792K）、`evidence/`（11M）、`gallery.py`、`.github/` 与仓库根的 4 个怪文件；`pyproject.toml` 去掉 pytest。
+> 验收方式改为**真机自用**（见 `AGENTS.md` §3 与 `/root/mascot-admin/docs/15-engineering-conventions.md`）。**本文件以下所有"verify_mN.py / N/N PASS / pytest 通过"都是历史记录，相关脚本已不存在，不要再按它们验收。**
+> 当前待办：M34 三处修复（频闪根因 pptDst、分钟星、撤底栏）真机复核；启动方式重做；然后等用户决定是否继续 B 阶段。
+
 ## 明早先读：2026-10-23 凌晨 路线转向（M31/M32，超越原版阶段 A1/A2）
 
 **你为什么看到旧版还行、新版很糟**：旧版前端（E:\TX-Pet 与 /root/projects/deepseek-chat-rebuild/static/pet-overlay.html）

@@ -17,3 +17,4 @@ evidence/*.tmp
 # os
 .DS_Store
 Thumbs.db
+.verify-state-*/
