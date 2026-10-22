@@ -30,6 +30,26 @@ WM_LBUTTONUP = 0x0202
 SW_HIDE = 0
 SW_SHOWNOACTIVATE = 4
 SWP_ASYNCWINDOWPOS = 0x4000
+WM_APP = 0x8000
+WM_LBUTTONDBLCLK = 0x0203
+WM_RBUTTONUP = 0x0205
+WM_COMMAND = 0x0111
+NIM_ADD = 0
+NIM_MODIFY = 1
+NIM_DELETE = 2
+NIF_MESSAGE = 0x00000001
+NIF_ICON = 0x00000002
+NIF_TIP = 0x00000004
+MF_STRING = 0x00000000
+MF_CHECKED = 0x00000008
+MF_GRAYED = 0x00000001
+MF_SEPARATOR = 0x00000800
+TPM_RIGHTBUTTON = 0x0002
+TPM_RETURNCMD = 0x0100
+IDI_APPLICATION = 32512
+IMAGE_ICON = 1
+LR_DEFAULTCOLOR = 0x00000000
+LR_SHARED = 0x00008000
 SWP_NOMOVE = 0x0002
 SWP_NOACTIVATE = 0x0010
 SWP_NOSIZE = 0x0001
@@ -96,13 +116,14 @@ if IS_WINDOWS:  # pragma: no branch - 平台分支
     _gdi32: Any = ctypes.windll.gdi32  # type: ignore[attr-defined]
     _dwmapi: Any = ctypes.windll.dwmapi  # type: ignore[attr-defined]
     _kernel32: Any = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    _shell32: Any = ctypes.windll.shell32  # type: ignore[attr-defined]
 else:
-    _user32 = _gdi32 = _dwmapi = _kernel32 = None
+    _user32 = _gdi32 = _dwmapi = _kernel32 = _shell32 = None
 
 
 def _declare_64bit_safe_prototypes() -> None:
     """显式声明 argtypes：64 位下不声明会导致句柄被截断成 32 位（经典崩溃）。"""
-    u, g, k = _user32, _gdi32, _kernel32
+    u, g, k, s = _user32, _gdi32, _kernel32, _shell32
     u.UpdateLayeredWindow.argtypes = [
         wt.HWND, wt.HDC, ctypes.POINTER(wt.POINT), ctypes.POINTER(SIZE),
         wt.HDC, ctypes.POINTER(wt.POINT), wt.DWORD, ctypes.POINTER(BLENDFUNCTION), wt.DWORD,
@@ -153,6 +174,20 @@ def _declare_64bit_safe_prototypes() -> None:
     u.GetWindowTextW.argtypes = [wt.HWND, wt.LPWSTR, ctypes.c_int]
     u.GetWindowTextLengthW.argtypes = [wt.HWND]
     u.PostMessageW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
+    s.Shell_NotifyIconW.argtypes = [wt.DWORD, ctypes.c_void_p]
+    s.Shell_NotifyIconW.restype = wt.BOOL
+    u.CreatePopupMenu.restype = wt.HMENU
+    u.AppendMenuW.argtypes = [wt.HMENU, wt.UINT, ctypes.c_size_t, wt.LPCWSTR]
+    u.TrackPopupMenu.argtypes = [
+        wt.HMENU, wt.UINT, ctypes.c_int, ctypes.c_int, ctypes.c_int, wt.HWND, ctypes.c_void_p,
+    ]
+    u.TrackPopupMenu.restype = ctypes.c_int
+    u.DestroyMenu.argtypes = [wt.HMENU]
+    u.SetForegroundWindow.argtypes = [wt.HWND]
+    s.ExtractIconW.argtypes = [wt.HINSTANCE, wt.LPCWSTR, wt.UINT]
+    s.ExtractIconW.restype = wt.HANDLE
+    u.LoadIconW.argtypes = [wt.HINSTANCE, ctypes.c_void_p]
+    u.LoadIconW.restype = wt.HANDLE
     k.CreateMutexW.argtypes = [wt.LPVOID, wt.BOOL, wt.LPCWSTR]
     k.CreateMutexW.restype = wt.HANDLE
     k.CloseHandle.argtypes = [wt.HANDLE]
@@ -385,10 +420,15 @@ def send_message(hwnd: int, msg: int, wparam: int = 0, lparam: int = 0) -> int:
     return int(_user32.SendMessageW(wt.HWND(hwnd), wt.UINT(msg), wt.WPARAM(wparam), wt.LPARAM(lparam)))
 
 
+def post_message(hwnd: int, msg: int, wparam: int = 0, lparam: int = 0) -> bool:
+    """异步投递消息（测试与托盘回调模拟用）。"""
+    _require_windows()
+    return bool(_user32.PostMessageW(wt.HWND(hwnd), wt.UINT(msg), wt.WPARAM(wparam), wt.LPARAM(lparam)))
+
+
 def post_close(hwnd: int) -> None:
     """投递 WM_CLOSE：让目标窗口走正常关闭流程。"""
-    _require_windows()
-    _user32.PostMessageW(wt.HWND(hwnd), WM_CLOSE, 0, 0)
+    post_message(hwnd, WM_CLOSE)
 
 
 def destroy_window(hwnd: int) -> None:

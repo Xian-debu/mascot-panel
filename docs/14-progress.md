@@ -282,3 +282,16 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 空态：青紫渐变四角星 + 提示；修了 signature 初值撞车导致“首帧空态不渲染”的 bug。
 - 面板出现 160ms 上浮淡入，尊重 `prefers-reduced-motion`。
 - 真机截图 `evidence/m6c-panel.png`、`evidence/m6c-empty.png`；细节见 `docs/22-m6c-panel.md`。
+### M7 托盘（2026-10-22 夜）
+
+- 新增 `src/mascot_win/tray.py`：`Shell_NotifyIconW` + 隐藏 popup 窗口 + 每次右键现构建的菜单
+  （显示面板 / 收进小球 / 暂停跟随✓ / 开机自启✓ / 退出）。`win32.py` 补常量与原型，
+  并把 `Shell_NotifyIconW`/`ExtractIconW` 声明到 **shell32**（放 user32 会启动即报
+  `function 'Shell_NotifyIconW' not found`）。
+- 运行时接入：`Runtime.command(name)`（内存命令队列，工作线程消费）、托盘双击=面板/小球互切、
+  `_paused` 暂停语义（跳过跟随轮询、动画继续）、tip 随状态刷新、
+  开机自启开关只在打包 exe 下写注册表（开发态 no-op）。
+- CLI：`ctl` 新增 `pause` / `resume`（走 control.json，与托盘共享同一语义）。
+- 验收：`scripts/verify_m7.py` 12 项全过（托盘窗口存在、双击互切、pause/resume、status、stop、退出码 0）；
+  证据 `evidence/m7-tray-menu.png`；Linux ruff 0 / pyright 0 / pytest 全绿。
+- 细节与坑（菜单阻塞消息泵、验收脚本读到旧 state.json）见 `docs/23-m7-tray.md`。

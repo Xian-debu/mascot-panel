@@ -118,6 +118,30 @@ class JsApi:
         return self._rt.send_text(text)
 
 
+
+# 托盘菜单命令 id（只在进程内使用，不进协议）
+CMD_TO_PANEL = 1001
+CMD_TO_BALL = 1002
+CMD_PAUSE = 1003
+CMD_AUTOSTART = 1004
+CMD_QUIT = 1005
+
+_STATE_LABEL = {
+    "idle": "待机",
+    "tracking": "跟随中",
+    "orbital": "小球",
+    "degraded": "降级",
+}
+
+
+def _autostart_enabled() -> bool:
+    try:
+        from mascot_win import autostart
+
+        return autostart.is_enabled()
+    except Exception:
+        return False
+
 class Runtime:
     """一个进程一份：面板 + 球 + 状态机。"""
 
@@ -152,6 +176,9 @@ class Runtime:
         self._messages: list[Message] = []
         self._sending = False
         self._send_queue: list[str] = []
+        self._paused = False
+        self._commands: list[str] = []
+        self._tray: Any = None
 
     # ---- 状态读取（JS 轮询） -------------------------------------------------
 
@@ -169,6 +196,8 @@ class Runtime:
                 "error": self._error,
                 "provider_detail": self._provider_detail,
                 "sending": self._sending,
+                "paused": self._paused,
+                "autostart": _autostart_enabled(),
                 "messages": [m.to_dict() for m in self._messages[-MESSAGE_LIMIT:]],
             }
 
@@ -177,6 +206,11 @@ class Runtime:
     def post(self, event: Event) -> None:
         with self._lock:
             self._events.append(event)
+
+    def command(self, name: str) -> None:
+        """托盘/ctl 的命令入口：只入队，工作线程执行。"""
+        with self._lock:
+            self._commands.append(name)
 
     def to_ball(self) -> dict[str, Any]:
         """面板按钮：把面板收进小球（只在跟随态有效）。"""
@@ -240,6 +274,7 @@ class Runtime:
                 self._error = f"{effect}: {exc}"
                 log.warning("effect_failed", extra={"event": effect, "detail": str(exc)})
         # 副作用先落地再落盘：否则 state.json 会短暂记录"已降级但 degraded=false"这种自相矛盾状态
+        self._update_tray_tip()
         self._write_state()
 
     def _effect(self, effect: str) -> None:
@@ -305,6 +340,12 @@ class Runtime:
             self.post(Event.CLICK_CLOCK)
         elif cmd == "to_panel":
             self.post(Event.CLICK_BALL)
+        elif cmd == "pause":
+            if not self._paused:
+                self.command("toggle_pause")
+        elif cmd == "resume":
+            if self._paused:
+                self.command("toggle_pause")
         elif cmd == "quit":
             self._stop.set()
             with contextlib.suppress(Exception):
@@ -394,6 +435,7 @@ class Runtime:
             start_hidden=True,
             on_click=lambda: self.post(Event.CLICK_BALL),
         )
+        self._create_tray()
 
         self._load_history()
         # 上一次异常退出可能留下 control.json：启动时先清掉，避免"幽灵消息"
@@ -413,13 +455,15 @@ class Runtime:
                 self._ball.pump()
                 self._drain_events()
                 self._drain_sends()
+                self._drain_commands()
 
                 if now >= next_poll:
                     next_poll = now + interval
                     self._poll_control()
-                    self._poll_pet(tracker)
-                    if not self._degraded:
-                        self._place_panel()
+                    if not self._paused:
+                        self._poll_pet(tracker)
+                        if not self._degraded:
+                            self._place_panel()
 
                 if self._frames and now >= next_frame:
                     next_frame = now + frame_s
@@ -437,8 +481,107 @@ class Runtime:
                 time.sleep(0.005)
         finally:
             with contextlib.suppress(Exception):  # 退出路径尽力而为
+                if self._tray is not None:
+                    self._tray.destroy()
+                self._tray = None
                 self._ball.destroy()
             self._ball = None
+
+
+    # ---- 托盘 ---------------------------------------------------------------
+
+    def _create_tray(self) -> None:
+        try:
+            from mascot_win.tray import TrayIcon
+
+            self._tray = TrayIcon(
+                tip=self._tray_tip(),
+                build_menu=self._build_tray_menu,
+                on_command=self._on_tray_command,
+                on_double_click=self._toggle_panel,
+            )
+            log.info("tray: 已创建")
+        except Exception as exc:  # 托盘失败不该拖垮主程序
+            log.warning("tray: 创建失败（%s）", exc)
+            self._tray = None
+
+    def _tray_tip(self) -> str:
+        state = self._machine.state.value
+        label = _STATE_LABEL.get(state, state)
+        if self._paused:
+            label += "（已暂停跟随）"
+        return f"天选姬 · {label}"
+
+    def _build_tray_menu(self) -> list[tuple[int, str, bool]]:
+        return [
+            (CMD_TO_PANEL, "显示面板", False),
+            (CMD_TO_BALL, "收进小球", False),
+            (0, "", False),
+            (CMD_PAUSE, "暂停跟随", self._paused),
+            (CMD_AUTOSTART, "开机自启", _autostart_enabled()),
+            (0, "", False),
+            (CMD_QUIT, "退出", False),
+        ]
+
+    def _on_tray_command(self, cmd: int) -> None:
+        if cmd == CMD_TO_PANEL:
+            self.command("to_panel")
+        elif cmd == CMD_TO_BALL:
+            self.command("to_ball")
+        elif cmd == CMD_PAUSE:
+            self.command("toggle_pause")
+        elif cmd == CMD_AUTOSTART:
+            self.command("toggle_autostart")
+        elif cmd == CMD_QUIT:
+            self.command("quit")
+
+    def _toggle_panel(self) -> None:
+        if self._machine.state is State.ORBITAL:
+            self.command("to_panel")
+        else:
+            self.command("to_ball")
+
+    def _update_tray_tip(self) -> None:
+        if self._tray is not None:
+            with contextlib.suppress(Exception):
+                self._tray.update_tip(self._tray_tip())
+
+    def _drain_commands(self) -> None:
+        with self._lock:
+            commands, self._commands = self._commands, []
+        for name in commands:
+            if name == "to_ball":
+                self.post(Event.CLICK_CLOCK)
+            elif name == "to_panel":
+                self.post(Event.CLICK_BALL)
+            elif name == "toggle_pause":
+                self._paused = not self._paused
+                log.info("pause: %s", "on" if self._paused else "off")
+                self._update_tray_tip()
+                self._write_state()
+            elif name == "toggle_autostart":
+                self._toggle_autostart()
+            elif name == "quit":
+                self._stop.set()
+
+    def _toggle_autostart(self) -> None:
+        import sys
+
+        if not getattr(sys, "frozen", False):
+            log.warning("autostart: 开发态（非打包 exe）不写注册表，请用 mascot autostart on --exe")
+            return
+        try:
+            from mascot_win import autostart
+
+            if autostart.is_enabled():
+                autostart.disable()
+                log.info("autostart: off")
+            else:
+                autostart.enable(sys.executable)
+                log.info("autostart: on")
+        except Exception as exc:
+            log.warning("autostart: 切换失败（%s）", exc)
+        self._write_state()
 
     def _drain_events(self) -> None:
         with self._lock:

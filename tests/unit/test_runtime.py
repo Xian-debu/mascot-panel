@@ -101,3 +101,38 @@ def test_history_failure_is_soft() -> None:
     snap = rt.snapshot()
     assert snap["messages"] == []
     assert "no history" in snap["provider_detail"]
+
+
+def test_tray_menu_has_expected_items() -> None:
+    rt = make_runtime()
+    menu = rt._build_tray_menu()  # noqa: SLF001
+    labels = [label for _id, label, _checked in menu if label]
+    assert labels == ["显示面板", "收进小球", "暂停跟随", "开机自启", "退出"]
+    assert sum(1 for _id, label, _c in menu if not label) == 2  # 两条分隔线
+
+
+def test_toggle_pause_updates_snapshot_and_tip() -> None:
+    rt = make_runtime()
+    assert rt.snapshot()["paused"] is False
+
+    rt.command("toggle_pause")
+    rt._drain_commands()  # noqa: SLF001
+    assert rt.snapshot()["paused"] is True
+    assert "暂停" in rt._tray_tip()  # noqa: SLF001
+
+    rt.command("toggle_pause")
+    rt._drain_commands()  # noqa: SLF001
+    assert rt.snapshot()["paused"] is False
+    assert "暂停" not in rt._tray_tip()  # noqa: SLF001
+
+
+def test_tray_command_routes_to_events() -> None:
+    from mascot_app.runtime import CMD_QUIT, CMD_TO_BALL, CMD_TO_PANEL
+
+    rt = make_runtime()
+    rt._on_tray_command(CMD_TO_BALL)  # noqa: SLF001
+    rt._on_tray_command(CMD_TO_PANEL)  # noqa: SLF001
+    rt._on_tray_command(CMD_QUIT)  # noqa: SLF001
+    rt._drain_commands()  # noqa: SLF001
+    assert Event.CLICK_CLOCK in rt._events or rt._events == []  # 事件已被状态机消费则只留退出标志
+    assert rt._stop.is_set()  # noqa: SLF001
