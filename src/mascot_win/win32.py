@@ -240,6 +240,39 @@ def screen_metrics() -> tuple[int, int]:
     return int(_user32.GetSystemMetrics(0)), int(_user32.GetSystemMetrics(1))
 
 
+class MONITORINFO(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", wt.DWORD),
+        ("rcMonitor", RECT),
+        ("rcWork", RECT),
+        ("dwFlags", wt.DWORD),
+    ]
+
+
+MONITOR_DEFAULTTONEAREST = 2
+
+
+def work_area(x: int = 0, y: int = 0) -> tuple[int, int, int, int]:
+    """包含该点的显示器的可用工作区（物理像素，已排除任务栏）。
+
+    多显示器场景下必须按宠物所在屏幕取工作区；只用主屏尺寸会把面板拽回主屏。
+    """
+    _require_windows()
+    _user32.MonitorFromPoint.argtypes = [wt.POINT, wt.DWORD]
+    _user32.MonitorFromPoint.restype = wt.HANDLE
+    _user32.GetMonitorInfoW.argtypes = [wt.HANDLE, ctypes.POINTER(MONITORINFO)]
+    _user32.GetMonitorInfoW.restype = wt.BOOL
+    info = MONITORINFO()
+    info.cbSize = ctypes.sizeof(MONITORINFO)
+    point = wt.POINT(int(x), int(y))
+    monitor = _user32.MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST)
+    if monitor and _user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+        r = info.rcWork
+        return int(r.left), int(r.top), int(r.right - r.left), int(r.bottom - r.top)
+    width, height = screen_metrics()
+    return 0, 0, width, height
+
+
 def cursor_pos() -> tuple[int, int]:
     _require_windows()
     pt = wt.POINT()

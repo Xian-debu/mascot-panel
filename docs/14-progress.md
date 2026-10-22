@@ -307,3 +307,13 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
   DoD ≤2 s 达成。降级横幅仍约 2.1s 出现（health 超时在独立线程）。
 - 回归：Linux ruff 0 / pyright 0 / pytest 全绿；Windows `verify_m4.py` 9 项 PASS、`verify_m7.py` 12 项全过；
   安装版无参启动截图 `evidence/m8-installed.png`。细节见 `docs/24-m8-startup.md`。
+
+### M9 免打扰与多显示器（2026-10-22 夜）
+
+- 托盘新增 `免打扰` 勾选项、`ctl dnd on|off`、`snapshot().dnd`；DND = 跳过 `SHOW_PANEL` 副作用
+  （不改状态机，手动打开优先），tip 追加"（免打扰）"。
+- `win32.work_area(x, y)`：按宠物中心点取所在显示器的 rcWork（排除任务栏）；
+  `_place_panel` 不再用主屏尺寸，副屏不再被拽回主屏。
+- 验收：`scripts/verify_m9.py` 8 项全过（DND 开关、面板隐藏/恢复、手动优先、stop）；
+  Windows 全量 93 passed / 1 skipped；Linux ruff 0 / pyright 0 / pytest 87 passed。
+  细节见 `docs/25-m9-dnd.md`。

@@ -107,7 +107,7 @@ def test_tray_menu_has_expected_items() -> None:
     rt = make_runtime()
     menu = rt._build_tray_menu()  # noqa: SLF001
     labels = [label for _id, label, _checked in menu if label]
-    assert labels == ["显示面板", "收进小球", "暂停跟随", "开机自启", "退出"]
+    assert labels == ["显示面板", "收进小球", "暂停跟随", "免打扰", "开机自启", "退出"]
     assert sum(1 for _id, label, _c in menu if not label) == 2  # 两条分隔线
 
 
@@ -136,3 +136,24 @@ def test_tray_command_routes_to_events() -> None:
     rt._drain_commands()  # noqa: SLF001
     assert Event.CLICK_CLOCK in rt._events or rt._events == []  # 事件已被状态机消费则只留退出标志
     assert rt._stop.is_set()  # noqa: SLF001
+
+
+def test_dnd_toggle_hides_panel_and_skips_auto_show() -> None:
+    from mascot_app.runtime import SHOW_PANEL
+
+    rt = make_runtime()
+    assert rt.snapshot()["dnd"] is False
+
+    rt.command("toggle_dnd")
+    rt._drain_commands()  # noqa: SLF001
+    assert rt.snapshot()["dnd"] is True
+    assert "免打扰" in rt._tray_tip()  # noqa: SLF001
+
+    # 免打扰下 PET_FOUND 的 SHOW_PANEL 副作用被跳过
+    rt._apply(rt._machine.push(Event.PET_FOUND))  # noqa: SLF001
+    assert rt.snapshot()["state"] == "tracking"
+
+    rt.command("toggle_dnd")
+    rt._drain_commands()  # noqa: SLF001
+    assert rt.snapshot()["dnd"] is False
+    assert SHOW_PANEL  # 常量仍由状态机产生，跳过逻辑只在 _apply

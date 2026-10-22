@@ -93,3 +93,14 @@ def test_layered_window_hit_circle_controls_click_through() -> None:
         assert at(100, 160) == win32.HTTRANSPARENT  # 球外穿透
     finally:
         win.destroy()
+
+
+def test_work_area_fits_inside_screen_and_excludes_taskbar() -> None:
+    from mascot_win import win32
+
+    wx, wy, ww, wh = win32.work_area(10, 10)
+    sw, sh = win32.screen_metrics()
+    assert ww > 0 and wh > 0
+    assert wx + ww <= sw and wy + wh <= sh
+    # 任务栏存在时工作区高度应小于全屏（否则至少应相等，不能更大）
+    assert wh <= sh

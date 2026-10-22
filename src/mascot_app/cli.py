@@ -251,12 +251,21 @@ def cmd_ctl(args: argparse.Namespace) -> int:
         if not _send_control("send", text=text):
             return _fail("IPC_FAILED", "控制文件写入失败", EXIT_FAIL)
         return _emit({"ok": True, "data": {"sent": "send", "pid": pid}}, EXIT_OK)
-    if args.action in ("to-ball", "to-panel", "pause", "resume"):
+    if args.action in ("to-ball", "to-panel", "pause", "resume", "dnd"):
         if pid is None:
             return _fail("NOT_RUNNING", "没有运行中的实例", EXIT_ENV)
-        cmd = {"to-ball": "to_ball", "to-panel": "to_panel", "pause": "pause", "resume": "resume"}[
-            args.action
-        ]
+        if args.action == "dnd":
+            value = (args.value or "on").strip().lower()
+            if value not in ("on", "off"):
+                return _fail("ARG_BAD_VALUE", f"dnd 只接受 on/off，收到 {value}", EXIT_ARGS)
+            cmd = "dnd_on" if value == "on" else "dnd_off"
+        else:
+            cmd = {
+                "to-ball": "to_ball",
+                "to-panel": "to_panel",
+                "pause": "pause",
+                "resume": "resume",
+            }[args.action]
         if not _send_control(cmd):
             return _fail("IPC_FAILED", "控制文件写入失败", EXIT_FAIL)
         return _emit({"ok": True, "data": {"sent": cmd, "pid": pid}}, EXIT_OK)
@@ -335,9 +344,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     c = sub.add_parser("ctl", help="控制运行中的实例")
     c.add_argument(
-        "action", choices=["status", "stop", "to-ball", "to-panel", "send", "pause", "resume"]
+        "action",
+        choices=["status", "stop", "to-ball", "to-panel", "send", "pause", "resume", "dnd"],
     )
     c.add_argument("--text", default="", help="send 动作要发送的文本")
+    c.add_argument("value", nargs="?", help="dnd 的 on/off")
     c.add_argument("--config", help="显式配置文件路径")
     c.set_defaults(func=cmd_ctl)
     return p

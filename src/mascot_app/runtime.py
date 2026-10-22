@@ -126,6 +126,7 @@ CMD_TO_BALL = 1002
 CMD_PAUSE = 1003
 CMD_AUTOSTART = 1004
 CMD_QUIT = 1005
+CMD_DND = 1006
 
 _STATE_LABEL = {
     "idle": "待机",
@@ -178,6 +179,7 @@ class Runtime:
         self._sending = False
         self._send_queue: list[str] = []
         self._paused = False
+        self._dnd = False  # 免打扰：不自动弹出面板（仍跟随、仍可手动打开）
         self._commands: list[str] = []
         self._tray: Any = None
 
@@ -198,6 +200,7 @@ class Runtime:
                 "provider_detail": self._provider_detail,
                 "sending": self._sending,
                 "paused": self._paused,
+                "dnd": self._dnd,
                 "autostart": _autostart_enabled(),
                 "messages": [m.to_dict() for m in self._messages[-MESSAGE_LIMIT:]],
                 "boot": boot.marks(),
@@ -271,6 +274,9 @@ class Runtime:
         boot.mark(f"state_{tr.state.value}")
         log.info("state", extra={"state": tr.state.value, "detail": tr.reason})
         for effect in tr.effects:
+            if effect == SHOW_PANEL and self._dnd:
+                log.info("dnd: 跳过自动弹面板")
+                continue
             try:
                 self._effect(effect)
             except Exception as exc:  # noqa: BLE001 - 单个副作用失败不该拖垮循环
@@ -349,6 +355,12 @@ class Runtime:
         elif cmd == "resume":
             if self._paused:
                 self.command("toggle_pause")
+        elif cmd == "dnd_on":
+            if not self._dnd:
+                self.command("toggle_dnd")
+        elif cmd == "dnd_off":
+            if self._dnd:
+                self.command("toggle_dnd")
         elif cmd == "quit":
             self._stop.set()
             with contextlib.suppress(Exception):
@@ -369,18 +381,26 @@ class Runtime:
             boot.mark("panel_hwnd")
         return hwnd
 
+    def _hide_panel(self) -> None:
+        from mascot_win import win32
+
+        if self._panel_hwnd:
+            with contextlib.suppress(Exception):
+                win32.show_window(self._panel_hwnd, False)
+
     def _place_panel(self, *, force: bool = False) -> None:
         from mascot_win import win32
 
         if self._pet is None or not self._panel_hwnd:
             return
         width, height = self.settings.panel_size
-        sw, sh = win32.screen_metrics()
+        # 用宠物所在显示器的可用工作区（排除任务栏）；主屏尺寸会把面板从副屏拽回来
+        wx, wy, ww, wh = win32.work_area(self._pet.x + self._pet.w // 2, self._pet.y + self._pet.h // 2)
         rect = follow_rect(
             Rect(self._pet.x, self._pet.y, self._pet.w, self._pet.h),
             self.settings.follow_offset,
             (width, height),
-            Screen(sw, sh),
+            Screen(ww, wh, wx, wy),
         )
         if rect is None:
             return
@@ -513,6 +533,8 @@ class Runtime:
         label = _STATE_LABEL.get(state, state)
         if self._paused:
             label += "（已暂停跟随）"
+        if self._dnd:
+            label += "（免打扰）"
         return f"天选姬 · {label}"
 
     def _build_tray_menu(self) -> list[tuple[int, str, bool]]:
@@ -521,6 +543,7 @@ class Runtime:
             (CMD_TO_BALL, "收进小球", False),
             (0, "", False),
             (CMD_PAUSE, "暂停跟随", self._paused),
+            (CMD_DND, "免打扰", self._dnd),
             (CMD_AUTOSTART, "开机自启", _autostart_enabled()),
             (0, "", False),
             (CMD_QUIT, "退出", False),
@@ -533,6 +556,8 @@ class Runtime:
             self.command("to_ball")
         elif cmd == CMD_PAUSE:
             self.command("toggle_pause")
+        elif cmd == CMD_DND:
+            self.command("toggle_dnd")
         elif cmd == CMD_AUTOSTART:
             self.command("toggle_autostart")
         elif cmd == CMD_QUIT:
@@ -560,6 +585,13 @@ class Runtime:
             elif name == "toggle_pause":
                 self._paused = not self._paused
                 log.info("pause: %s", "on" if self._paused else "off")
+                self._update_tray_tip()
+                self._write_state()
+            elif name == "toggle_dnd":
+                self._dnd = not self._dnd
+                log.info("dnd: %s", "on" if self._dnd else "off")
+                if self._dnd:
+                    self._hide_panel()
                 self._update_tray_tip()
                 self._write_state()
             elif name == "toggle_autostart":

@@ -110,3 +110,13 @@ def test_orbit_layout_scales_with_pet() -> None:
     big = orbit_layout(Rect(0, 0, 320, 320))
     assert big.ball_r > small.ball_r
     assert big.window > small.window
+
+
+def test_follow_rect_clamped_into_secondary_monitor_work_area() -> None:
+    # 副屏在右：工作区原点 (2560, 0)，宠物贴右边缘时面板必须收进副屏
+    pet = Rect(4300, 400, 180, 180)
+    screen = Screen(2560, 1400, 2560, 0)
+    panel = follow_rect(pet, (210, -130), screen=screen)
+    assert panel is not None
+    assert panel.x >= 2560
+    assert panel.right <= 2560 + 2560
