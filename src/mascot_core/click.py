@@ -19,11 +19,14 @@ class ClickGate:
 
     调用方每收到一次“点击”（抬起且未拖动）就调一次 click()，每轮循环调 tick()。
     超时未 tick 的挂起点击会被后续 click() 丢弃（正常循环 10fps，不会发生）。
+
+    window_ms = 0 表示关掉双击手势：click() 直接返回 single，单击立即生效、
+    不再为了等双击而延迟（对应配置 click_window_ms = 0）。
     """
 
     def __init__(self, window_ms: float = CLICK_WINDOW_MS) -> None:
-        if window_ms <= 0:
-            raise ValueError("window_ms 必须大于 0")
+        if window_ms < 0:
+            raise ValueError("window_ms 不能为负")
         self.window_ms = float(window_ms)
         self._first_ms: float | None = None
 
@@ -33,6 +36,9 @@ class ClickGate:
 
     def click(self, now_ms: float) -> str | None:
         """记一次点击：窗口内的第二次返回 "double"，第一次返回 None（等超时）。"""
+        if self.window_ms <= 0:
+            self._first_ms = None
+            return SINGLE
         first = self._first_ms
         if first is not None and now_ms - first <= self.window_ms:
             self._first_ms = None

@@ -67,6 +67,10 @@ class Settings(BaseSettings):
     # 历史
     history_limit: int = Field(default=50, ge=5, le=500)
 
+    # 交互
+    # 待机球双击时间窗（毫秒）：0 = 关闭双击手势，单击立即开面板（M28）
+    click_window_ms: int = Field(default=350, ge=0, le=2000)
+
     # 功能开关（默认全关的开关必须在这里显式列出）
     notify_pulse: bool = True
     agent_inbox: bool = False
@@ -96,6 +100,7 @@ HOT_FIELDS = (
     "lost_frames",
     "notify_pulse",
     "history_limit",
+    "click_window_ms",
 )
 
 

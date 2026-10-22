@@ -60,6 +60,15 @@ def test_third_click_after_double_starts_new_pending() -> None:
     assert gate.pending is True
 
 
-def test_window_must_be_positive() -> None:
+def test_negative_window_rejected() -> None:
     with pytest.raises(ValueError):
-        ClickGate(0)
+        ClickGate(-1)
+
+
+def test_zero_window_disables_double_click() -> None:
+    gate = ClickGate(0)
+    # 关掉双击手势：每次点击立刻就是 single，不再挂起等待
+    assert gate.click(1000.0) == SINGLE
+    assert gate.pending is False
+    assert gate.tick(1000.0) is None
+    assert gate.click(1010.0) == SINGLE

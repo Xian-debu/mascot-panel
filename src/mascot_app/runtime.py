@@ -365,7 +365,7 @@ class Runtime:
         self._panel_offset: tuple[int, int] | None = load_panel_offset()
         self._panel_dirty = False
         # 待机球单击/双击：单击开面板、双击回右下角（靠 350ms 时间窗区分，见 click.py）
-        self._click_gate = ClickGate()
+        self._click_gate = ClickGate(self.settings.click_window_ms)
         self._cleared_ids: set[str] = load_cleared_ids()
         # 免打扰：不自动弹出面板（仍跟随、仍可手动打开）；跨重启记住
         self._dnd = bool(flags.get("dnd", False))
@@ -399,6 +399,7 @@ class Runtime:
                     "health_timeout_s": self.settings.health_timeout_s,
                     "poll_interval_ms": self.settings.poll_interval_ms,
                     "orbit_speed": self.settings.orbit_speed,
+                    "click_window_ms": self.settings.click_window_ms,
                 },
                 "config": {
                     "path": str(self._config_path) if self._config_path else None,
@@ -641,6 +642,9 @@ class Runtime:
         # 后端/窗口相关字段变了：不重建，但要让用户知道得重启
         self._restart_required = restart
         self._config_reloads += 1
+        # 双击时间窗是构造期参数：变了就换一个新 gate（挂起的单击也就自然作废）
+        if self._click_gate.window_ms != float(self.settings.click_window_ms):
+            self._click_gate = ClickGate(self.settings.click_window_ms)
         # history_limit 调小了：内存与磁盘一起裁，别让旧消息在下次写盘前复活
         trimmed = len(self._messages) > self.settings.history_limit
         if trimmed:
@@ -783,9 +787,13 @@ class Runtime:
         if self._machine.state is not State.IDLE:
             self.post(Event.CLICK_BALL)
             return
-        if self._click_gate.click(time.monotonic() * 1000.0) == DOUBLE:
+        result = self._click_gate.click(time.monotonic() * 1000.0)
+        if result == DOUBLE:
             # 双击：不打开面板，把球送回右下角
             self._reset_ball_to_corner()
+        elif result == SINGLE:
+            # click_window_ms=0（关掉双击手势）：没有待确认的单击，立刻开面板
+            self.post(Event.CLICK_BALL)
 
     def _on_ball_drag(self, x: int, y: int) -> None:
         """拖动回调：夹到工作区内，并记住位置（下一帧重渲染不会弹回角落）。"""
