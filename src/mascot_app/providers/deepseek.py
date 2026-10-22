@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -22,6 +23,7 @@ from mascot_core.contract import HealthState, Message, ProviderHealth
 DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-chat"
 CONTEXT_TURNS = 20
+_KEY_VARS = ("DEEPSEEK_AUTH_TOKEN", "DEEPSEEK_API_KEY", "MASCOT_DEEPSEEK_API_KEY")
 
 
 class DeepSeekProvider:
@@ -48,10 +50,28 @@ class DeepSeekProvider:
 
     @staticmethod
     def _key() -> str:
-        return (
-            os.environ.get("DEEPSEEK_AUTH_TOKEN", "").strip()
-            or os.environ.get("DEEPSEEK_API_KEY", "").strip()
-        )
+        for name in _KEY_VARS:
+            value = os.environ.get(name, "").strip()
+            if value:
+                return value
+        # 从开始菜单/桌面快捷方式启动时，进程可能仍带着 Explorer 的旧 env 块
+        # （setx 写入用户变量后 Explorer 不一定已刷新），所以再读一次用户环境变量注册表。
+        # 只读取，不复制、不写文件、不进日志。
+        if sys.platform == "win32":
+            try:
+                import winreg
+
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key_handle:
+                    for name in _KEY_VARS:
+                        try:
+                            value, _ = winreg.QueryValueEx(key_handle, name)
+                        except FileNotFoundError:
+                            continue
+                        if str(value).strip():
+                            return str(value).strip()
+            except OSError:
+                pass
+        return ""
 
     def _headers(self) -> dict[str, str]:
         key = self._key()
