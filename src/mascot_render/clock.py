@@ -45,6 +45,19 @@ def clock_angles(
     return hour_angle, min_angle, sec_angle
 
 
+def _draw_alert_ring(
+    img: Image.Image, cx: int, cy: int, r: float, palette: dict[str, str]
+) -> None:
+    """新消息提示环（M30）：28 个像素点围一圈亮环，硬边不抗锯齿。"""
+    dr = ImageDraw.Draw(img)
+    color = (*_rgb("cyan-bright", palette), 255)
+    for i in range(28):
+        a = 2 * math.pi * i / 28
+        x = round(cx + r * math.cos(a))
+        y = round(cy + r * math.sin(a))
+        dr.rectangle([x - 1, y - 1, x + 1, y + 1], fill=color)
+
+
 def _draw_sparkle(
     dr: ImageDraw.ImageDraw, x: int, y: int, big: bool, color: RGB, pulse: float
 ) -> None:
@@ -210,6 +223,7 @@ def render_clock(
     now_ts: float | None = None,
     stuck: bool = False,
     hover: bool = False,
+    alert: bool = False,
 ) -> Image.Image:
     """画一颗像素时钟球（返回 size×size 的 RGBA，球居中，四周透明）。"""
     if size < 16:
@@ -220,6 +234,9 @@ def render_clock(
     sprite = _render_sprite(size, now=now, stuck=stuck, hover=hover, pulse=pulse)
     canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     canvas.alpha_composite(sprite, ((size - sprite.width) // 2, (size - sprite.height) // 2))
+    if alert:
+        # M30 状态灯：新消息到达时在球外圈亮一圈像素，2.5s 后自动消失
+        _draw_alert_ring(canvas, size // 2, size // 2, max(6.0, size / 2 - 4), palette_for(stuck))
     return canvas
 
 
@@ -233,6 +250,7 @@ def render_orbit_frame(
     now_ts: float | None = None,
     stuck: bool = False,
     hover: bool = False,
+    alert: bool = False,
     tail_deg: float = TAIL_DEG,
 ) -> Image.Image:
     """整帧：像素彗尾 + 球（球心按 angle_deg 落在 orbit_r 上）。供后续环绕态使用。"""
@@ -268,4 +286,6 @@ def render_orbit_frame(
     bx = cx + orbit_r * math.cos(rad)
     by = cy + orbit_r * math.sin(rad)
     img.alpha_composite(sprite, (round(bx - sprite.width / 2), round(by - sprite.height / 2)))
+    if alert:
+        _draw_alert_ring(img, round(bx), round(by), ball_r + 8, pal)
     return img

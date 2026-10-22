@@ -93,3 +93,34 @@ def test_orbit_frame_is_rgba() -> None:
     img = render_orbit_frame(200, ball_r=32, orbit_r=70, angle_deg=90.0, now=TEN_TEN)
     assert isinstance(img, Image.Image)
     assert img.mode == "RGBA"
+
+
+def _opaque(im: Image.Image) -> int:
+    return sum(1 for a in im.getchannel("A").getdata() if a)
+
+
+def test_alert_ring_adds_pixels_outside_ball() -> None:
+    plain = render_clock(96, now=TEN_TEN, now_ts=0.0)
+    alert = render_clock(96, now=TEN_TEN, now_ts=0.0, alert=True)
+    assert _opaque(alert) > _opaque(plain) + 40
+    # 提示环在球外圈：外接矩形比平时更靠边
+    plain_box = plain.getchannel("A").getbbox()
+    alert_box = alert.getchannel("A").getbbox()
+    assert plain_box is not None and alert_box is not None
+    assert alert_box[0] <= plain_box[0] - 1 and alert_box[2] >= plain_box[2] + 1
+
+
+def test_alert_ring_is_deterministic() -> None:
+    a = render_clock(96, now=TEN_TEN, now_ts=0.0, alert=True)
+    b = render_clock(96, now=TEN_TEN, now_ts=0.0, alert=True)
+    assert list(a.getdata()) == list(b.getdata())
+
+
+def test_orbit_frame_alert_adds_ring_around_ball() -> None:
+    plain = render_orbit_frame(
+        300, ball_r=40, orbit_r=110, angle_deg=0.0, now=TEN_TEN, now_ts=0.0
+    )
+    alert = render_orbit_frame(
+        300, ball_r=40, orbit_r=110, angle_deg=0.0, now=TEN_TEN, now_ts=0.0, alert=True
+    )
+    assert _opaque(alert) > _opaque(plain) + 40

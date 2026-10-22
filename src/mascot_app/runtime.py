@@ -46,6 +46,7 @@ log = logging.getLogger(__name__)
 
 PANEL_TITLE = "mascot-panel"
 BALL_SIZE = 128
+ALERT_S = 2.5  # 新消息提示环亮多久（秒，M30）
 
 
 def _state_dir() -> Path:
@@ -365,6 +366,7 @@ class Runtime:
         self._ball_circle: tuple[int, int, int] | None = None
         # 待机球位置：用户拖过就记住（宠物不在时也不回角落）
         self._ball_pos: tuple[int, int] | None = load_ball_pos()
+        self._alert_until = 0.0  # 新消息提示环的截止时刻（M30，monotonic）
         self._panel_pos: tuple[int, int] | None = load_panel_pos()
         # 跟随态拖出来的面板记偏移（跟着宠物走）；待机态拖出来记绝对位置
         self._panel_offset: tuple[int, int] | None = load_panel_offset()
@@ -397,6 +399,7 @@ class Runtime:
                 "paused": self._paused,
                 "orbit_paused": self._orbit_paused,
                 "ball_circle": list(self._ball_circle) if self._ball_circle else None,
+                "alert": self._alert_active(),
                 "dnd": self._dnd,
                 "autostart": _autostart_enabled(),
                 "messages": [m.to_dict() for m in self._messages[-self.settings.history_limit:]],
@@ -514,6 +517,7 @@ class Runtime:
                 if reply.role == "assistant" and reply.text:
                     with self._lock:
                         self._messages.append(reply)
+                    self._mark_alert()
                 self._error = ""
                 self._provider_detail = ""
             except SendCancelled:
@@ -530,6 +534,7 @@ class Runtime:
                                 msg_id=f"partial-{int(time.time() * 1000)}",
                             )
                         )
+                    self._mark_alert()
                 log.info("send 已取消")
             except Exception as exc:
                 self._error = str(exc)
@@ -766,6 +771,13 @@ class Runtime:
         y = wy + wh - height - 24
         return max(wx, x), max(wy, y)
 
+    def _mark_alert(self) -> None:
+        """有新消息到达：小球亮 2.5s 提示环（M30 状态灯，不改状态机）。"""
+        self._alert_until = time.monotonic() + ALERT_S
+
+    def _alert_active(self) -> bool:
+        return time.monotonic() < self._alert_until
+
     def _render_idle_ball(self) -> None:
         """待机小球：固定在右下角，不绕轨道；点击即可展开面板。"""
         from mascot_render.clock import render_clock
@@ -774,7 +786,11 @@ class Runtime:
             return
         # 与轨道球同一套像素时钟（M14）：待机不该是"另一种球"
         image = render_clock(
-            BALL_SIZE, now_ts=time.time(), stuck=self._degraded, hover=False
+            BALL_SIZE,
+            now_ts=time.time(),
+            stuck=self._degraded,
+            hover=False,
+            alert=self._alert_active(),
         )
         self._ball.render(image)
         half = BALL_SIZE // 2
@@ -1003,6 +1019,7 @@ class Runtime:
             orbit_r=layout.orbit_r,
             angle_deg=math.degrees(angle),
             stuck=self._machine.state is State.DEGRADED,
+            alert=self._alert_active(),
         )
         cx, cy = pet_rect.center
         half = layout.window / 2
