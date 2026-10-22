@@ -52,7 +52,12 @@ class PetTracker:
             x, y, w, h = win32.get_window_rect(self._hwnd)
             if w > 0 and h > 0:
                 self._missing = 0
-                return TrackedWindow(self._hwnd, win32.get_class_name(self._hwnd), "", Rect(x, y, w, h))
+                return TrackedWindow(
+                    self._hwnd,
+                    win32.get_class_name(self._hwnd),
+                    win32.get_process_name(self._hwnd),
+                    Rect(x, y, w, h),
+                )
             self._hwnd = 0
 
         for hwnd in win32.enum_windows():

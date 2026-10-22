@@ -9,6 +9,7 @@ from __future__ import annotations
 import ctypes
 import ctypes.wintypes as wt
 import uuid
+from collections.abc import Callable
 
 from PIL import Image, ImageChops
 
@@ -35,11 +36,20 @@ class WNDCLASSW(ctypes.Structure):
 class LayeredWindow:
     """一个 32bpp 自绘窗口；render() 是幂等的，move() 只改位置。"""
 
-    def __init__(self, width: int, height: int, *, click_through: bool = True) -> None:
+    def __init__(
+        self,
+        width: int,
+        height: int,
+        *,
+        click_through: bool = True,
+        on_click: Callable[[], None] | None = None,
+        start_hidden: bool = False,
+    ) -> None:
         win32._require_windows()
         self.width = int(width)
         self.height = int(height)
         self._click_through = click_through
+        self._on_click = on_click
         self._class_name = f"mascot_layered_{uuid.uuid4().hex[:8]}"
         self._proc = WNDPROC(self._on_message)
 
@@ -72,8 +82,9 @@ class LayeredWindow:
         if not hwnd:
             raise OSError("CreateWindowExW failed")
         self.hwnd = int(hwnd)
-        win32._user32.ShowWindow(wt.HWND(self.hwnd), win32.SW_SHOWNOACTIVATE)
         self._saved: Image.Image | None = None
+        if not start_hidden:
+            win32._user32.ShowWindow(wt.HWND(self.hwnd), win32.SW_SHOWNOACTIVATE)
 
     def _on_message(self, hwnd: int, msg: int, wparam: int, lparam: int) -> int:
         if msg == win32.WM_DESTROY:
@@ -81,6 +92,10 @@ class LayeredWindow:
             return 0
         if msg == win32.WM_NCHITTEST and self._click_through:
             return win32.HTTRANSPARENT
+        if msg == win32.WM_LBUTTONUP:
+            if self._on_click is not None:
+                self._on_click()
+            return 0
         return int(
             win32._user32.DefWindowProcW(
                 wt.HWND(hwnd), wt.UINT(msg), wt.WPARAM(wparam), wt.LPARAM(lparam)
@@ -138,6 +153,12 @@ class LayeredWindow:
     def set_click_through(self, enabled: bool) -> None:
         self._click_through = enabled
         win32.set_click_through(self.hwnd, enabled)
+
+    def hide(self) -> None:
+        win32.show_window(self.hwnd, False)
+
+    def show(self) -> None:
+        win32.show_window(self.hwnd, True)
 
     def pump(self) -> int:
         """处理本线程窗口消息，返回处理条数。"""

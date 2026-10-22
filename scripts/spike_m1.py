@@ -119,10 +119,12 @@ def main() -> int:
         try:
             import webview
 
-            html_path = Path(__file__).resolve().parent.parent / "web" / "panel.html"
+            from mascot_app.runtime import load_panel_html
+
+            html = load_panel_html()
             window = webview.create_window(
                 "mascot",
-                html=html_path.read_text(encoding="utf-8"),
+                html=html,
                 width=340,
                 height=460,
                 frameless=True,

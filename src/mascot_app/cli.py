@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 from mascot_app import __version__
+from mascot_app.logging_setup import setup_logging
 from mascot_app.providers import make_provider
 from mascot_core.config import Settings, default_config_path, load_settings
 
@@ -127,20 +128,135 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    # M0 只做骨架；真正的窗口接线在 M1/M2。
-    return _fail("ENV_NOT_READY", "M0 skeleton: run 将在 M2 接线（见 docs/14-progress.md）", EXIT_ENV)
+    settings = load_settings(Path(args.config) if args.config else None)
+    if args.provider:
+        settings.provider = args.provider
+    if args.allow_offline is not None:
+        settings.allow_offline = args.allow_offline
+    setup_logging(settings.log_dir, settings.log_level)
+
+    try:
+        from mascot_app.runtime import Runtime
+        from mascot_win import win32
+        from mascot_win.single import AlreadyRunning, SingleInstance
+    except Exception as exc:  # noqa: BLE001 - 非 Windows 平台上导入即失败
+        return _fail("ENV_UNSUPPORTED", f"run 仅支持 Windows: {exc}", EXIT_ENV)
+
+    win32.enable_dpi_awareness()
+    instance = SingleInstance()
+    try:
+        if not instance.acquire():
+            return _fail("ALREADY_RUNNING", "已有 mascot 实例在运行（命名互斥体）", EXIT_ENV)
+    except Exception as exc:  # noqa: BLE001
+        return _fail("ENV_UNSUPPORTED", f"无法创建单实例互斥体: {exc}", EXIT_ENV)
+
+    provider = make_provider(settings)
+    runtime = Runtime(settings, provider)
+    try:
+        runtime.run(
+            duration_s=args.duration,
+            demo=args.demo,
+            screenshot=args.screenshot,
+            gui=args.gui,
+        )
+    except AlreadyRunning:
+        return _fail("ALREADY_RUNNING", "已有 mascot 实例在运行", EXIT_ENV)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        instance.release()
+    return _emit({"ok": True, "data": runtime.snapshot()}, EXIT_OK)
+
+
+def _running_pid() -> int | None:
+    """pid 文件 + 进程存活 + 进程名核对（防止 pid 复用误判）。"""
+    try:
+        import psutil
+
+        from mascot_win.single import pid_file_path
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        with open(pid_file_path(), encoding="utf-8") as fh:
+            pid = int(fh.read().strip())
+    except (OSError, ValueError):
+        return None
+    try:
+        proc = psutil.Process(pid)
+        if not proc.is_running():
+            return None
+        cmdline = " ".join(proc.cmdline()).lower()
+    except Exception:  # noqa: BLE001 - 进程已经没了
+        return None
+    return pid if "mascot" in cmdline else None
+
+
+def _read_state_json() -> dict | None:
+    try:
+        from mascot_win.single import state_dir
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        return json.loads((Path(state_dir()) / "state.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _send_control(cmd: str) -> bool:
+    try:
+        from mascot_win.single import state_dir
+    except Exception:  # noqa: BLE001
+        return False
+    try:
+        path = Path(state_dir()) / "control.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"cmd": cmd}), encoding="utf-8")
+        return True
+    except OSError:
+        return False
 
 
 def cmd_ctl(args: argparse.Namespace) -> int:
     settings = load_settings(Path(args.config) if args.config else None)
+    pid = _running_pid()
     if args.action == "status":
-        checks, ok = collect_doctor(settings, probe=False)
+        checks, _ok = collect_doctor(settings, probe=False)
+        state = _read_state_json() or {}
         return _emit(
-            {"ok": True, "data": {"running": False, "pid": None, "state": "idle", "checks": checks}},
+            {
+                "ok": True,
+                "data": {
+                    "running": pid is not None,
+                    "pid": pid,
+                    "state": state.get("state", "stopped" if pid is None else "unknown"),
+                    "degraded": state.get("degraded", False),
+                    "pet": state.get("pet"),
+                    "uptime_s": state.get("uptime_s"),
+                    "checks": checks,
+                },
+            },
             EXIT_OK,
         )
+    if args.action in ("to-ball", "to-panel"):
+        if pid is None:
+            return _fail("NOT_RUNNING", "没有运行中的实例", EXIT_ENV)
+        cmd = "to_ball" if args.action == "to-ball" else "to_panel"
+        if not _send_control(cmd):
+            return _fail("IPC_FAILED", "控制文件写入失败", EXIT_FAIL)
+        return _emit({"ok": True, "data": {"sent": cmd, "pid": pid}}, EXIT_OK)
     if args.action == "stop":
-        return _emit({"ok": True, "data": {"stopped": False, "detail": "not running"}}, EXIT_OK)
+        if pid is None:
+            return _emit({"ok": True, "data": {"stopped": False, "detail": "not running"}}, EXIT_OK)
+        try:
+            from mascot_app.runtime import PANEL_TITLE
+            from mascot_win import win32
+
+            hwnd = win32.find_window(PANEL_TITLE, timeout_s=1.0)
+            if hwnd:
+                win32.post_close(hwnd)
+        except Exception as exc:  # noqa: BLE001 - 平台不支持时退化为报错
+            return _fail("STOP_FAILED", str(exc), EXIT_FAIL)
+        return _emit({"ok": True, "data": {"stopped": True, "pid": pid, "method": "wm_close"}}, EXIT_OK)
     return _fail("ARG_BAD_ACTION", f"unknown ctl action: {args.action}", EXIT_ARGS)
 
 
@@ -154,12 +270,23 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--offline", action="store_true", help="不探测 provider")
     d.set_defaults(func=cmd_doctor)
 
-    r = sub.add_parser("run", help="启动桌宠（M2 起可用）")
+    r = sub.add_parser("run", help="启动桌宠")
     r.add_argument("--config", help="显式配置文件路径")
+    r.add_argument("--provider", choices=["wsl", "null"], help="覆盖跨环境 provider")
+    r.add_argument("--duration", type=float, default=0.0, help="运行多少秒后自动退出（验收用）")
+    r.add_argument("--demo", action="store_true", help="自动演示：2s 收球、6s 回面板（验收用）")
+    r.add_argument("--screenshot", help="运行中截图保存路径（验收用）")
+    r.add_argument("--gui", choices=["edgechromium", "mshtml"], help="强制 GUI 后端")
+    r.add_argument(
+        "--allow-offline",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="provider 不可达时是否允许离线运行",
+    )
     r.set_defaults(func=cmd_run)
 
     c = sub.add_parser("ctl", help="控制运行中的实例")
-    c.add_argument("action", choices=["status", "stop"])
+    c.add_argument("action", choices=["status", "stop", "to-ball", "to-panel"])
     c.add_argument("--config", help="显式配置文件路径")
     c.set_defaults(func=cmd_ctl)
     return p

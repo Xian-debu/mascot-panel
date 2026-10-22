@@ -32,6 +32,15 @@ RADIUS: dict[str, int] = {"r-card": 10, "r-panel": 14}
 MOTION_MS: dict[str, int] = {"fast": 120, "base": 200}
 
 
+# 由主色派生出的半透明变体：CSS 里的描边/底色不再手写 rgba，改颜色只改 COLORS。
+ALPHA_VARS: dict[str, tuple[str, float]] = {
+    "accent-soft": ("accent", 0.14),
+    "accent-line": ("accent", 0.50),
+    "amber-soft": ("amber", 0.12),
+    "amber-line": ("amber", 0.45),
+}
+
+
 def hex_to_rgb(value: str) -> tuple[int, int, int]:
     v = value.lstrip("#")
     if len(v) != 6:
@@ -39,9 +48,16 @@ def hex_to_rgb(value: str) -> tuple[int, int, int]:
     return tuple(int(v[i : i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
 
 
+def rgba(name: str, alpha: float) -> str:
+    """把 token 颜色转成 CSS rgba()，供描边/半透明底使用。"""
+    r, g, b = hex_to_rgb(COLORS[name])
+    return f"rgba({r},{g},{b},{alpha:g})"
+
+
 def css_variables() -> str:
     """生成 :root { --bg: ...; } 供 web/ 直接注入。"""
     lines = [f"  --{name}: {value};" for name, value in COLORS.items()]
+    lines += [f"  --{name}: {rgba(color, alpha)};" for name, (color, alpha) in ALPHA_VARS.items()]
     lines += [f"  --{name}: {value}px;" for name, value in SIZES.items()]
     lines += [f"  --{name}: {value}px;" for name, value in SPACING.items()]
     lines += [f"  --{name}: {value}px;" for name, value in RADIUS.items()]

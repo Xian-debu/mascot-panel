@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>mascot-panel</title>
+<style>
+  /* 设计令牌由 mascot_core.tokens.css_variables() 注入，改颜色只改 Python 一处 */
+  /*__TOKENS__*/
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:transparent;overflow:hidden;
+    font:var(--fs-12)/1.5 "Segoe UI","Microsoft YaHei UI",system-ui,sans-serif;color:var(--text);}
+  .panel{position:relative;height:100%;display:flex;flex-direction:column;
+    background:var(--bg);border:1px solid var(--border);border-radius:var(--r-panel);
+    box-shadow:0 12px 32px rgba(0,0,0,.55);overflow:hidden;}
+  .bar{display:flex;align-items:center;gap:var(--s2);padding:10px var(--s3);border-bottom:1px solid var(--border);}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);}
+  .dot.working{animation:pulse 1.6s ease-in-out infinite;}
+  .dot.awaiting{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:slow 2.4s ease-in-out infinite;}
+  .dot.error{background:var(--red);box-shadow:0 0 8px var(--red);}
+  @keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
+  @keyframes slow{0%,100%{opacity:.5}50%{opacity:1}}
+  .title{font-size:var(--fs-13);font-weight:600;letter-spacing:.2px;}
+  .grow{flex:1;}
+  .chip{font-size:var(--fs-11);color:var(--text-dim);border:1px solid var(--border);
+    border-radius:var(--r-card);padding:2px 8px;background:var(--card);}
+  .body{flex:1;padding:var(--s3);display:flex;flex-direction:column;gap:10px;overflow:auto;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r-card);padding:var(--s3);}
+  .muted{color:var(--text-dim);font-size:var(--fs-11);}
+  .kv{display:flex;justify-content:space-between;gap:10px;font-size:var(--fs-12);}
+  .kv b{font-weight:600;color:var(--text);}
+  .msg{border:1px solid var(--border);border-radius:var(--r-card);padding:var(--s2) var(--s3);
+    font-size:var(--fs-13);background:var(--card);}
+  .banner{display:none;margin:0 var(--s3) var(--s2);padding:var(--s2) var(--s3);border-radius:var(--r-card);
+    border:1px solid var(--amber-line);background:var(--amber-soft);color:var(--amber);font-size:var(--fs-11);}
+  .banner.show{display:block;}
+  .foot{display:flex;align-items:center;gap:var(--s2);padding:10px var(--s3);border-top:1px solid var(--border);}
+  .spacer{flex:1;}
+  button{font:inherit;color:var(--text);background:var(--card);border:1px solid var(--border);
+    border-radius:var(--r-card);padding:6px 10px;cursor:pointer;
+    transition:border-color var(--base),background var(--base);}
+  button:hover{border-color:var(--accent);}
+  button.primary{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent);}
+  .hint{font-size:var(--fs-11);color:var(--text-muted);}
+</style>
+</head>
+<body>
+<div class="panel">
+  <header class="bar">
+    <span class="dot" id="dot"></span>
+    <span class="title">天选姬</span>
+    <span class="grow"></span>
+    <span class="chip" id="state">idle</span>
+  </header>
+  <div class="banner" id="banner">后端不可达，消息暂时无法收发（离线可用）</div>
+  <main class="body">
+    <section class="card">
+      <div class="kv"><span class="muted">跟随目标</span><b id="pet">-</b></div>
+      <div class="kv"><span class="muted">窗口矩形</span><b id="rect">-</b></div>
+      <div class="kv"><span class="muted">运行时长</span><b id="uptime">-</b></div>
+    </section>
+    <section class="card msg">
+      <div class="muted" style="margin-bottom:6px">M2 联调面板</div>
+      这里之后会变成真正的聊天流（M4）。现在它证明：面板能跟着宠物窗口移动、能收进小球、后端掉线有横幅。
+    </section>
+  </main>
+  <footer class="foot">
+    <button id="toBall" class="primary">收进小球</button>
+    <span class="spacer"></span>
+    <span class="hint">点小球回到面板</span>
+  </footer>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+function paint(s){
+  if(!s) return;
+  $('state').textContent = s.state;
+  $('dot').className = 'dot' + (s.state === 'orbital' ? ' working' : '') + (s.state === 'degraded' ? ' error' : '');
+  $('banner').className = 'banner' + (s.degraded ? ' show' : '');
+  $('pet').textContent = s.pet ? (s.pet.process || '-') : '-';
+  $('rect').textContent = s.pet ? (s.pet.x + ',' + s.pet.y + ' ' + s.pet.w + '\u00d7' + s.pet.h) : '-';
+  $('uptime').textContent = (s.uptime_s || 0).toFixed(0) + 's';
+}
+async function sync(){
+  try { if (window.pywebview && window.pywebview.api) paint(await window.pywebview.api.snapshot()); }
+  catch (e) { /* 启动早期 api 还没注入 */ }
+  setTimeout(sync, 200);
+}
+$('toBall').addEventListener('click', async () => {
+  try { await window.pywebview.api.to_ball(); } catch (e) {}
+});
+sync();
+</script>
+</body>
+</html>

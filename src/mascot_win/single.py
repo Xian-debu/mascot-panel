@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 
 from mascot_win import win32
 
 MUTEX_NAME = "Local\\Mascot.SingleInstance"
+
+
+def state_dir() -> str:
+    return os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "mascot")
+
+
+def pid_file_path() -> str:
+    """诊断用 pid 文件（不参与判重，见 R-04）。"""
+    return os.path.join(state_dir(), "mascot.pid")
 
 
 class AlreadyRunning(RuntimeError):
@@ -27,7 +37,7 @@ class SingleInstance:
             win32.close_handle(self._handle)
             self._handle = 0
             return False
-        pid_file = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "mascot", "mascot.pid")
+        pid_file = pid_file_path()
         try:
             os.makedirs(os.path.dirname(pid_file), exist_ok=True)
             with open(pid_file, "w", encoding="utf-8") as fh:
@@ -39,6 +49,8 @@ class SingleInstance:
     def release(self) -> None:
         win32.close_handle(self._handle)
         self._handle = 0
+        with contextlib.suppress(OSError):
+            os.unlink(pid_file_path())
 
     def __enter__(self) -> SingleInstance:
         self.acquire()

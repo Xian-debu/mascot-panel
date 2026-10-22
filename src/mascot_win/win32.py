@@ -24,6 +24,12 @@ WS_EX_TOPMOST = 0x00000008
 WS_EX_NOACTIVATE = 0x08000000
 WS_POPUP = 0x80000000
 GWL_EXSTYLE = -20
+WM_CLOSE = 0x0010
+WM_LBUTTONDOWN = 0x0201
+WM_LBUTTONUP = 0x0202
+SW_HIDE = 0
+SW_SHOWNOACTIVATE = 4
+SWP_ASYNCWINDOWPOS = 0x4000
 SW_SHOWNOACTIVATE = 4
 SWP_NOACTIVATE = 0x0010
 SWP_NOSIZE = 0x0001
@@ -142,6 +148,9 @@ def _declare_64bit_safe_prototypes() -> None:
     u.GetWindowLongPtrW.argtypes = [wt.HWND, ctypes.c_int]
     u.GetWindowLongPtrW.restype = ctypes.c_ssize_t
     u.SetWindowLongPtrW.argtypes = [wt.HWND, ctypes.c_int, ctypes.c_ssize_t]
+    u.GetWindowTextW.argtypes = [wt.HWND, wt.LPWSTR, ctypes.c_int]
+    u.GetWindowTextLengthW.argtypes = [wt.HWND]
+    u.PostMessageW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
     k.CreateMutexW.argtypes = [wt.LPVOID, wt.BOOL, wt.LPCWSTR]
     k.CreateMutexW.restype = wt.HANDLE
     k.CloseHandle.argtypes = [wt.HANDLE]
@@ -300,6 +309,63 @@ def move_window(hwnd: int, x: int, y: int) -> None:
     _user32.SetWindowPos(
         wt.HWND(hwnd), wt.HWND(HWND_TOPMOST), x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE
     )
+
+
+def move_window_below(hwnd: int, x: int, y: int) -> None:
+    """只改位置、不动 Z 序、不激活（跟随用；避免每帧抢焦点）。"""
+    _require_windows()
+    _user32.SetWindowPos(
+        wt.HWND(hwnd),
+        wt.HWND(0),
+        x,
+        y,
+        0,
+        0,
+        SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS,
+    )
+
+
+def show_window(hwnd: int, visible: bool) -> None:
+    _require_windows()
+    _user32.ShowWindow(wt.HWND(hwnd), SW_SHOWNOACTIVATE if visible else SW_HIDE)
+
+
+def add_toolwindow(hwnd: int) -> None:
+    """WS_EX_TOOLWINDOW：不出现在 Alt+Tab 与任务栏。"""
+    _require_windows()
+    _set_ex_style(hwnd, _get_ex_style(hwnd) | WS_EX_TOOLWINDOW)
+
+
+def get_window_title(hwnd: int) -> str:
+    _require_windows()
+    n = int(_user32.GetWindowTextLengthW(wt.HWND(hwnd)))
+    if n <= 0:
+        return ""
+    buf = ctypes.create_unicode_buffer(n + 2)
+    _user32.GetWindowTextW(wt.HWND(hwnd), buf, n + 2)
+    return buf.value
+
+
+def find_window(title: str, *, exact: bool = True, timeout_s: float = 0.0) -> int:
+    """按标题找顶层窗口（面板 HWND 的发现手段）。超时返回 0。"""
+    _require_windows()
+    import time
+
+    deadline = time.monotonic() + timeout_s
+    while True:
+        for hwnd in enum_windows():
+            text = get_window_title(hwnd)
+            if (text == title) if exact else (title in text):
+                return hwnd
+        if time.monotonic() >= deadline:
+            return 0
+        time.sleep(0.05)
+
+
+def post_close(hwnd: int) -> None:
+    """投递 WM_CLOSE：让目标窗口走正常关闭流程。"""
+    _require_windows()
+    _user32.PostMessageW(wt.HWND(hwnd), WM_CLOSE, 0, 0)
 
 
 def destroy_window(hwnd: int) -> None:

@@ -82,3 +82,33 @@ spike_m1.py --seconds 7 ->
 - 球是手动线程里的自绘窗口，还没接状态机与面板联动（M2）。
 - `mascot ctl stop` 仍是 no-op：IPC 在 M2 一并设计。
 - 面板透明区域目前是"整窗透明 + HTML 自绘圆角"，点击穿透策略还没做（M4）。
+## M2 运行时联调 — 完成（2026-10-22 夜）
+
+**做了什么**
+- `mascot_app/runtime.py`：真进程运行时。状态机副作用 → 面板/小球/横幅；主线程跑 pywebview，
+  工作线程"状态机 + 追踪 + 自绘球 + 球消息泵"，交叉只走 `queue.Queue`（D-15 落地）。
+- `ctl` 控制面：`status / stop / to-ball / to-panel`，用 `state.json` + `control.json` 两个文件通信，
+  `stop` 走 `WM_CLOSE` 让进程正常收尾。
+- 面板 HTML 移入包内（`mascot_app/web/panel.html`），由 `js_api` 暴露 `snapshot()/to_ball()`。
+- `win32` 补 `find_window / move_window_below / show_window / add_toolwindow / post_close`。
+- `scripts/verify_m2.py`：真机端到端验收（起进程→跟随→收球→点球→单实例→停机），退出码 0/5。
+
+**怎么验证（Windows 10、2560×1600 @150%、真实 TX-Pet 运行中）**
+```
+verify_m2.py -> {ok: true, checks: 6/6}
+  follow_tracking  tracking, pet TX Mascot.exe 1616,272 180×180
+  ctl_to_ball      orbital
+  click_ball_returns  ball_hwnd 29626450 → tracking（真 wndproc 点击路径）
+  ctl_status_running  running=true
+  single_instance   第二个实例 rc=3 ALREADY_RUNNING
+  ctl_stop          method=wm_close，10s 内退出
+Linux: ruff 0 / pyright 0 / pytest 37 passed
+```
+截图：`evidence/m2-panel.png`（面板跟随）、`evidence/m2-ball.png`（收球）、`evidence/m2-degraded.png`（降级横幅）。
+
+**提交**：见 git log（runtime/cli/win32/layered/tracker/single/verify_m2/docs/16）
+
+**已知缺口**
+- 面板内容仍是联调占位，不是真聊天流（M4）。
+- `ctl stop` 依赖窗口标题找 hwnd；面板被隐藏时退化为 kill（M5 前补 pid 兜底）。
+- 球不能拖拽/记忆落点（P1）。
