@@ -1,13 +1,14 @@
 # 进度报告（自动维护，供明早阅读）
 
-## 明早先读：2026-10-22 夜间交付总结（更新至 M14）
+## 明早先读：2026-10-22 夜间交付总结（更新至 M15）
 
 **做完了什么**：按 docs/10-plan.md 推进 M0→M13，产品仓库 /root/mascot
 （骨架 → 纯逻辑层 → CLI/provider → CI/进度 → 部署 → M1 平台 spike → M2 运行时 → M3 渲染 →
 M4 面板与聊天 → M5 打包交付 → M6a/b/c 视觉对齐（像素时钟球/彗尾/品牌位）→ M7 托盘 →
 M8 冷启动 → M9 免打扰与多屏定位 → M10 接上旧聊天后端 → M11 流式增量与停止生成 →
-M12 配置写回与开关持久化 → M13 待机形态 → M14 待机球像素时钟化/可拖动/记忆位置）。
-管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020 见当天提交）。
+M12 配置写回与开关持久化 → M13 待机形态 → M14 待机球像素时钟化/可拖动/记忆位置 →
+M15 聊天记录跨重启保留与清空）。
+管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021 见当天提交）。
 
 **现在能做什么**（Windows 上已装好）：
 ```
@@ -23,7 +24,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 
 **验证过的硬事实**：
 - Linux：ruff 0 / pyright 0 / pytest 全绿；Windows：全量回归通过；M10 验收 9/9、M11 验收 15/15、
-  M12 验收 16/16、M13 验收 10/10、M14 验收 9/9 PASS。
+  M12 验收 16/16、M13 验收 10/10、M14 验收 9/9、M15 验收 14/14 PASS。
 - 真机跟随 TX-Pet 窗口（961,459 / 1616,272，随窗口移动）、面板与环绕球同进程共存、ctl 全动作可用、
   托盘菜单与双击互切可用、安装/卸载/回滚/双跑/自启逐个跑过（evidence/m5-*、m6*、m7-*、m8-*、m9 验收输出）。
 - 冷启动 **进程创建→面板可见 0.70 s**（安装版 0.71–0.87 s），此前 4.34 s；DoD ≤2 s 已达成（docs/24）。
@@ -42,8 +43,8 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
    注意：真旧后端需要 API Key，我今晚只用一个模拟旧后端的假服务验证过（scripts/verify_m10.py 9/9 PASS）。
 
 **已知缺口**：未签名（SmartScreen 可能提示）、无自动更新、旧版本目录不自动回收、
-面板立绘仍引用旧项目资源（未迁入本仓库）、消息不落盘（重启即丢历史）、旧后端未用真实 API Key 实测、
-待机球仍是渐变球（未换像素时钟）、待机球不可拖动、配置写回会丢注释且无热重载。
+面板立绘仍引用旧项目资源（未迁入本仓库）、旧后端未用真实 API Key 实测、
+配置写回会丢注释且无热重载、历史只存最近 50 条且清空仅限本地、待机球无右键菜单与边缘吸附。
 
 **仓库位置**：
 - 产品：/root/mascot（git；README 有结构与命令）
@@ -408,3 +409,25 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 遗留：拖动无边缘吸附/双击复位；待机球无右键菜单；面板 idle 位置仍不跟随球。
 - 交付：`dist/mascot/mascot.exe`（7.7M）重建，`install-win.sh` 已装到
   `C:/Users/ZYX/AppData/Local/mascot/app/0.1.0`（`current.txt=0.1.0`），安装版 `mascot.exe doctor` 体检通过。
+
+
+### M15 聊天记录：跨重启保留 + 可清空（2026-10-22 深夜）
+
+- 痛点：M4 起消息只在内存，进程一退整段对话消失（progress 已知缺口「消息不落盘」）。
+  桌宠是长期常驻的程序，重启丢历史等于"记忆断了"。
+- 纯逻辑 `src/mascot_core/history.py`：`parse_history`（接受 version+messages 或裸数组，
+  坏输入跳过不抛）、`dump_history`、`merge_history`（按 id 或内容指纹去重、按 ts 排序取尾 50 条）、
+  单条文本上限 4000。9 项单测。
+- 运行时：历史落 `%LOCALAPPDATA%/mascot/history.json`（原子写）；冷启动先读本地历史，
+  后端历史回来再合并（欢迎语/消息都不重复）；`_drain_sends` 的 finally 里落盘；
+  新增 `clear_history()` 与 `ctl clear-history`。
+- 验收：`scripts/verify_m15.py` 14 项全过（发消息→落盘→重启恢复→继续追加→清空→重启不复活）。
+  `verify_m13.py` 10/10、`verify_m14.py` 9/9 回归通过。Linux ruff 0 / pyright 0 / pytest 全绿。
+  截图 `evidence/m15-history.png`。细节见 `docs/31-m15-history.md`。
+- 关键坑：验收脚本第二轮 `wait_for` 读到上一轮遗留的 state.json 旧快照就提前返回，
+  `ctl send` 跑在新实例就绪之前，被新实例启动时"清空 control.json"清掉——只有追加项失败，
+  其它全过。修法是每轮 spawn 前删 state/control 再等（`start_fresh()`）。
+  产品侧另修：落盘后顺手刷新 state.json，`ctl status` 才看得到新消息。
+- 遗留：历史只存文本与最近 50 条，无文件轮转；清空仅本地；后端自身历史不在范围内。
+- 交付：`dist/mascot/mascot.exe` 重建，`install-win.sh` 已装到
+  `C:/Users/ZYX/AppData/Local/mascot/app/0.1.0`（`current.txt=0.1.0`），安装版 doctor 通过。

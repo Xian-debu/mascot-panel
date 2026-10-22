@@ -24,6 +24,7 @@ from mascot_app import boot
 from mascot_core.config import Settings
 from mascot_core.contract import ChatProvider, Message, SendCancelled
 from mascot_core.geometry import Rect, Screen, angle_for_time, follow_rect, orbit_layout
+from mascot_core.history import dump_history, merge_history, parse_history
 from mascot_core.state import (
     CLEAR_DEGRADED,
     HIDE_BALL,
@@ -112,6 +113,31 @@ def save_flags(*, dnd: bool, paused: bool) -> None:
     raw["dnd"] = dnd
     raw["paused"] = paused
     _write_runtime(raw)
+
+
+def _history_path() -> Path:
+    return _state_dir() / "history.json"
+
+
+def load_local_history() -> list[Message]:
+    """上次退出时面板里的对话；文件坏了当空，绝不因此启动失败。"""
+    try:
+        raw = _history_path().read_text(encoding="utf-8")
+    except OSError:
+        return []
+    return parse_history(raw)
+
+
+def save_local_history(messages: list[Message]) -> None:
+    """原子写盘，失败只记日志（聊天记录写不了也不该影响桌宠本体）。"""
+    path = _history_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(dump_history(messages[-MESSAGE_LIMIT:]), encoding="utf-8")
+        tmp.replace(path)
+    except OSError as exc:
+        log.warning("history: 写入失败 %s: %s", path, exc)
 
 
 TOKENS_PLACEHOLDER = "/*__TOKENS__*/"
@@ -241,7 +267,8 @@ class Runtime:
         self._degraded = False
         self._error: str = ""
         self._provider_detail: str = ""
-        self._messages: list[Message] = []
+        # 先挂上本次运行前落盘的对话，后端历史稍后由 _load_history 合并进来
+        self._messages: list[Message] = load_local_history()
         self._sending = False
         self._send_queue: list[str] = []
         self._stream_text = ""
@@ -329,7 +356,23 @@ class Runtime:
             self._provider_detail = str(exc)
             return
         with self._lock:
-            self._messages = list(history)
+            local = list(self._messages)
+            self._messages = merge_history(history, local, limit=MESSAGE_LIMIT)
+        self._persist_history()
+
+    def _persist_history(self) -> None:
+        with self._lock:
+            messages = list(self._messages)
+        save_local_history(messages)
+        # 顺手刷新 state.json：`ctl status` 才看得到新消息（面板自己走 JS API，不依赖它）
+        self._write_state()
+
+    def clear_history(self) -> None:
+        """清空面板里的对话（落盘文件一起清），下次启动不会再出现。"""
+        with self._lock:
+            self._messages = []
+        save_local_history([])
+        self._write_state()
 
     def _drain_sends(self) -> None:
         with self._lock:
@@ -374,6 +417,7 @@ class Runtime:
                     self._sending = False
                     self._stream_active = False
                     self._stream_text = ""
+                self._persist_history()
 
     def _send_streaming(self, text: str) -> Message:
         """有 send_stream 就用流式（面板能看到逐字增长），否则退回一次性 send。"""
@@ -468,6 +512,8 @@ class Runtime:
                 self.send_text(str(json.loads(raw).get("text", "")))
         elif cmd == "cancel_send":
             self.cancel_send()
+        elif cmd == "clear_history":
+            self.clear_history()
         elif cmd == "to_ball":
             self.post(Event.CLICK_CLOCK)
         elif cmd == "to_panel":
