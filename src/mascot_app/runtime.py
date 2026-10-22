@@ -358,6 +358,11 @@ class Runtime:
         self._cancel = threading.Event()
         flags = load_flags()
         self._paused = bool(flags.get("paused", False))
+        # 环绕球公转可暂停（M29）：暂停时角度冻结，恢复时从同一角度接着转
+        self._orbit_paused = False
+        self._orbit_frozen_t = 0.0
+        # 环绕球当前可见命中圆（屏幕坐标）：验收/排障要能知道球此刻在哪（M29）
+        self._ball_circle: tuple[int, int, int] | None = None
         # 待机球位置：用户拖过就记住（宠物不在时也不回角落）
         self._ball_pos: tuple[int, int] | None = load_ball_pos()
         self._panel_pos: tuple[int, int] | None = load_panel_pos()
@@ -390,6 +395,8 @@ class Runtime:
                 "sending": self._sending,
                 "streaming": {"active": self._stream_active, "text": self._stream_text},
                 "paused": self._paused,
+                "orbit_paused": self._orbit_paused,
+                "ball_circle": list(self._ball_circle) if self._ball_circle else None,
                 "dnd": self._dnd,
                 "autostart": _autostart_enabled(),
                 "messages": [m.to_dict() for m in self._messages[-self.settings.history_limit:]],
@@ -590,6 +597,8 @@ class Runtime:
         if effect == START_FRAMES:
             self._frames = True
             self._orbit_t0 = time.monotonic()
+            self._orbit_paused = False
+            self._orbit_frozen_t = 0.0
             if self._ball is not None:
                 self._ball.disable_drag()
                 self._ball.enable_context_menu(lambda: [], lambda _cmd: None)
@@ -770,6 +779,7 @@ class Runtime:
         self._ball.render(image)
         half = BALL_SIZE // 2
         self._ball.set_hit_circle(half, half, half + 2)
+        self._ball_circle = None
         self._ball.enable_drag(self._on_ball_drag, self._on_ball_drag_end)
         self._ball.enable_context_menu(self._build_tray_menu, self._on_tray_command)
         x, y = self._idle_anchor((BALL_SIZE, BALL_SIZE))
@@ -783,8 +793,21 @@ class Runtime:
         log.info("ball_reset", extra={"via": "menu_or_double_click"})
 
     def _on_ball_click(self) -> None:
-        """球被单击（抬起且未拖动）：待机态要区分单击/双击，其余状态直接开面板。"""
-        if self._machine.state is not State.IDLE:
+        """球被单击（抬起且未拖动）。
+
+        - 待机态：单击开面板，双击把球送回右下角；
+        - 环绕态：单击回到面板，双击暂停/恢复公转（M29）；
+        - 其余状态：直接开面板。
+        """
+        state = self._machine.state
+        if state is State.ORBITAL:
+            result = self._click_gate.click(time.monotonic() * 1000.0)
+            if result == DOUBLE:
+                self._toggle_orbit_pause()
+            elif result == SINGLE:
+                self.post(Event.CLICK_BALL)
+            return
+        if state is not State.IDLE:
             self.post(Event.CLICK_BALL)
             return
         result = self._click_gate.click(time.monotonic() * 1000.0)
@@ -794,6 +817,18 @@ class Runtime:
         elif result == SINGLE:
             # click_window_ms=0（关掉双击手势）：没有待确认的单击，立刻开面板
             self.post(Event.CLICK_BALL)
+
+    def _toggle_orbit_pause(self) -> None:
+        """暂停/恢复环绕球公转：冻结角度，恢复时从同一角度接着转（避免瞬移）。"""
+        now = time.monotonic()
+        if self._orbit_paused:
+            self._orbit_t0 = now - self._orbit_frozen_t
+            self._orbit_paused = False
+        else:
+            self._orbit_frozen_t = now - self._orbit_t0
+            self._orbit_paused = True
+        log.info("orbit_pause", extra={"paused": self._orbit_paused})
+        self._write_state()
 
     def _on_ball_drag(self, x: int, y: int) -> None:
         """拖动回调：夹到工作区内，并记住位置（下一帧重渲染不会弹回角落）。"""
@@ -972,12 +1007,12 @@ class Runtime:
         cx, cy = pet_rect.center
         half = layout.window / 2
         self._ball.render(image)
-        self._ball.set_hit_circle(
-            round(half + layout.orbit_r * math.cos(angle)),
-            round(half + layout.orbit_r * math.sin(angle)),
-            layout.ball_r + 4,
-        )
-        self._ball.move(round(cx - half), round(cy - half))
+        bx = round(half + layout.orbit_r * math.cos(angle))
+        by = round(half + layout.orbit_r * math.sin(angle))
+        self._ball.set_hit_circle(bx, by, layout.ball_r + 4)
+        left, top = round(cx - half), round(cy - half)
+        self._ball.move(left, top)
+        self._ball_circle = (left + bx, top + by, layout.ball_r + 4)
 
     # ---- 工作线程 -----------------------------------------------------------
 
@@ -1066,7 +1101,8 @@ class Runtime:
 
                 if self._frames and now >= next_frame:
                     next_frame = now + frame_s
-                    self._render_frame(now - self._orbit_t0)
+                    frame_t = self._orbit_frozen_t if self._orbit_paused else now - self._orbit_t0
+                    self._render_frame(frame_t)
 
                 # 状态文件每秒刷新：ctl status / 验收脚本才能看到 uptime、消息与 sending
                 if now - last_state_write >= 1.0:
