@@ -1,12 +1,13 @@
 # 进度报告（自动维护，供明早阅读）
 
-## 明早先读：2026-10-22 夜间交付总结（更新至 M11）
+## 明早先读：2026-10-22 夜间交付总结（更新至 M13）
 
-**做完了什么**：按 docs/10-plan.md 推进 M0→M11，产品仓库 /root/mascot
+**做完了什么**：按 docs/10-plan.md 推进 M0→M13，产品仓库 /root/mascot
 （骨架 → 纯逻辑层 → CLI/provider → CI/进度 → 部署 → M1 平台 spike → M2 运行时 → M3 渲染 →
 M4 面板与聊天 → M5 打包交付 → M6a/b/c 视觉对齐（像素时钟球/彗尾/品牌位）→ M7 托盘 →
-M8 冷启动 → M9 免打扰与多屏定位 → M10 接上旧聊天后端 → M11 流式增量与停止生成）。
-管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0017 自授权清单。
+M8 冷启动 → M9 免打扰与多屏定位 → M10 接上旧聊天后端 → M11 流式增量与停止生成 →
+M12 配置写回与开关持久化 → M13 待机形态）。
+管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019 见当天提交）。
 
 **现在能做什么**（Windows 上已装好）：
 ```
@@ -21,7 +22,8 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 注意：**开机自启当前是关闭的**，要开：`mascot.exe autostart on`（或托盘勾选）。
 
 **验证过的硬事实**：
-- Linux：ruff 0 / pyright 0 / pytest 98 passed；Windows：全量回归通过；M10 验收 9/9、M11 验收 15/15 PASS。
+- Linux：ruff 0 / pyright 0 / pytest 全绿；Windows：全量回归通过；M10 验收 9/9、M11 验收 15/15、
+  M12 验收 16/16、M13 验收 10/10 PASS。
 - 真机跟随 TX-Pet 窗口（961,459 / 1616,272，随窗口移动）、面板与环绕球同进程共存、ctl 全动作可用、
   托盘菜单与双击互切可用、安装/卸载/回滚/双跑/自启逐个跑过（evidence/m5-*、m6*、m7-*、m8-*、m9 验收输出）。
 - 冷启动 **进程创建→面板可见 0.70 s**（安装版 0.71–0.87 s），此前 4.34 s；DoD ≤2 s 已达成（docs/24）。
@@ -40,7 +42,8 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
    注意：真旧后端需要 API Key，我今晚只用一个模拟旧后端的假服务验证过（scripts/verify_m10.py 9/9 PASS）。
 
 **已知缺口**：未签名（SmartScreen 可能提示）、无自动更新、旧版本目录不自动回收、
-面板立绘仍引用旧项目资源（未迁入本仓库）、无流式增量输出/停止生成、消息不落盘、DND 与暂停不持久化、旧后端未用真实 API Key 实测。
+面板立绘仍引用旧项目资源（未迁入本仓库）、消息不落盘（重启即丢历史）、旧后端未用真实 API Key 实测、
+待机球仍是渐变球（未换像素时钟）、待机球不可拖动、配置写回会丢注释且无热重载。
 
 **仓库位置**：
 - 产品：/root/mascot（git；README 有结构与命令）
@@ -365,3 +368,21 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 验收：`scripts/verify_m12.py` 16 项全过（配置写回/拒绝非法/重启后 dnd+paused 仍为 true）；
   Linux ruff 0 / pyright 0 / pytest 全绿（新增 12 项单测）。细节见 `docs/28-m12-config.md`。
 - 遗留：配置只支持扁平键、写回会丢注释、无热重载、窗口位置未持久化。
+
+
+### M13 待机形态（2026-10-22 深夜）
+
+- 痛点：宠物（游戏）没开时进程活着但屏幕全空——球和面板都不显示，只能靠托盘判断，
+  等于“软件没启动”。而“先开桌宠、后开游戏”是最常见的使用顺序。
+- 状态机新增第五态 `idle_open`：idle 点球 → 独立面板；`PET_LOST` 从 orbital 回来不再收球；
+  `PROVIDER_READY` 恢复白名单加入 idle_open。
+- 运行时加 `_idle_anchor`（光标所在**显示器**工作区右下角，留 24px）、`_render_idle_ball`
+  （渐变球每秒重渲染走相位），冷启动没宠物也立刻有球。
+- 验收：`scripts/verify_m13.py` 10 项全过（真实 WM_LBUTTONUP 点球 → idle_open；面板右下各差 24px）。
+  Linux ruff 0 / pyright 0 / pytest 全绿。截图 `evidence/m13-idle.png`、`m13-idle-panel.png`。
+  细节见 `docs/29-m13-idle.md`。
+- 两个坑：pyright 会被 `and self._ball is not None` 沿循环回边窄化成 None（改局部变量）；
+  DPI 下 panel_size 是逻辑尺寸、WebView 窗口是物理尺寸（488×634），锚定前必须量真实窗口；
+  验收脚本自己也要 `enable_dpi_awareness()` 否则 work_area 返回逻辑坐标。
+- 遗留：待机球仍是渐变球（未换像素时钟）、不可拖动、面板 idle 位置不记忆。
+

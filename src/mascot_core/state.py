@@ -1,6 +1,9 @@
 """状态机：替代旧实现里"靠 Popen/poll 判断窗口在不在"的做法。
 
-四个状态：idle / tracking / orbital / degraded。
+五个状态：idle / idle_open / tracking / orbital / degraded。
+
+idle_open = 宠物不在时用户手动展开的面板（右下角常驻），
+这样"游戏没开"也能聊天，而不是进程在跑却什么都看不见。
 每次转移带一个 reason 码，写日志后能被 `mascot doctor` 与用户报告解读。
 """
 
@@ -12,6 +15,7 @@ from enum import StrEnum
 
 class State(StrEnum):
     IDLE = "idle"
+    IDLE_OPEN = "idle_open"
     TRACKING = "tracking"
     ORBITAL = "orbital"
     DEGRADED = "degraded"
@@ -70,26 +74,34 @@ def transition(
 ) -> Transition:
     """纯函数版转移表（测试与文档的单一真源）。"""
     if event is Event.PET_FOUND:
-        if state is State.IDLE:
-            return Transition(State.TRACKING, "PET_FOUND", (SHOW_PANEL,))
+        if state in (State.IDLE, State.IDLE_OPEN):
+            # 待机态右下角有常驻小球；宠物出现后收球、面板改为跟随
+            return Transition(State.TRACKING, "PET_FOUND", (SHOW_PANEL, HIDE_BALL))
         return Transition(state, "IGNORED:PET_FOUND")
 
     if event is Event.PET_LOST:
         if state is State.TRACKING:
-            return Transition(State.IDLE, "PET_LOST", (HIDE_PANEL,))
+            # 面板收起，回到待机：右下角常驻小球，仍可点开
+            return Transition(State.IDLE, "PET_LOST", (HIDE_PANEL, SHOW_BALL))
         if state is State.ORBITAL:
-            # 宠物消失时球没有轨道可绕，收起球回到 idle
-            return Transition(State.IDLE, "PET_LOST", (STOP_FRAMES, HIDE_BALL))
+            # 宠物消失时球没有轨道可绕：停帧并把球钉到右下角
+            return Transition(State.IDLE, "PET_LOST", (STOP_FRAMES,))
         return Transition(state, "IGNORED:PET_LOST")
 
     if event is Event.CLICK_CLOCK:
         if state is State.TRACKING:
             return Transition(State.ORBITAL, "CLICK_CLOCK", (HIDE_PANEL, SHOW_BALL, START_FRAMES))
+        if state is State.IDLE_OPEN:
+            # 待机面板收进右下角小球
+            return Transition(State.IDLE, "CLICK_CLOCK", (HIDE_PANEL, SHOW_BALL))
         return Transition(state, "IGNORED:CLICK_CLOCK")
 
     if event is Event.CLICK_BALL:
         if state is State.ORBITAL:
             return Transition(State.TRACKING, "CLICK_BALL", (STOP_FRAMES, HIDE_BALL, SHOW_PANEL))
+        if state is State.IDLE:
+            # 待机态点球 = 打开面板（钉在右下角，不跟随）
+            return Transition(State.IDLE_OPEN, "CLICK_BALL", (SHOW_PANEL, HIDE_BALL))
         return Transition(state, "IGNORED:CLICK_BALL")
 
     if event is Event.PROVIDER_DOWN:
@@ -101,7 +113,7 @@ def transition(
         if state is State.DEGRADED:
             back = (
                 State(resume_state)
-                if resume_state in (State.TRACKING, State.ORBITAL)
+                if resume_state in (State.TRACKING, State.ORBITAL, State.IDLE_OPEN)
                 else State.IDLE
             )
             return Transition(back, "PROVIDER_READY", (CLEAR_DEGRADED,))

@@ -64,10 +64,42 @@ def test_repeated_provider_down_is_ignored() -> None:
     assert t.reason == "IGNORED:PROVIDER_DOWN"
 
 
-def test_pet_lost_in_orbital_hides_ball() -> None:
+def test_pet_lost_in_orbital_keeps_ball_visible() -> None:
+    # M13：宠物消失后球不再收掉，而是钉到右下角继续可点
     t = transition(State.ORBITAL, Event.PET_LOST)
     assert t.state is State.IDLE
-    assert STOP_FRAMES in t.effects and HIDE_BALL in t.effects
+    assert STOP_FRAMES in t.effects
+    assert HIDE_BALL not in t.effects
+
+
+def test_idle_click_ball_opens_standalone_panel() -> None:
+    t = transition(State.IDLE, Event.CLICK_BALL)
+    assert t.state is State.IDLE_OPEN
+    assert set(t.effects) == {SHOW_PANEL, HIDE_BALL}
+
+
+def test_idle_open_click_clock_collapses_to_ball() -> None:
+    t = transition(State.IDLE_OPEN, Event.CLICK_CLOCK)
+    assert t.state is State.IDLE
+    assert set(t.effects) == {HIDE_PANEL, SHOW_BALL}
+
+
+def test_pet_found_from_idle_open_keeps_panel_and_hides_ball() -> None:
+    t = transition(State.IDLE_OPEN, Event.PET_FOUND)
+    assert t.state is State.TRACKING
+    assert set(t.effects) == {SHOW_PANEL, HIDE_BALL}
+
+
+def test_pet_lost_from_tracking_returns_to_standalone_ball() -> None:
+    t = transition(State.TRACKING, Event.PET_LOST)
+    assert t.state is State.IDLE
+    assert set(t.effects) == {HIDE_PANEL, SHOW_BALL}
+
+
+def test_idle_open_is_restored_after_degraded() -> None:
+    m = Machine(state=State.IDLE_OPEN)
+    m.push(Event.PROVIDER_DOWN)
+    assert m.push(Event.PROVIDER_READY).state is State.IDLE_OPEN
 
 
 def test_render_failed_restarts_orbital() -> None:

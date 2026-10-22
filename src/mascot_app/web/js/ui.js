@@ -4,8 +4,8 @@
   const $ = function (id) { return document.getElementById(id); };
 
   /* 状态 → 灯：idle 呼吸 / tracking|orbital 流动 / degraded 红点 */
-  const LIGHT = { idle: 'idle', tracking: 'working', orbital: 'working', degraded: 'error' };
-  const LABEL = { idle: '待机', tracking: '跟随中', orbital: '小球', degraded: '降级' };
+  const LIGHT = { idle: 'idle', idle_open: 'idle', tracking: 'working', orbital: 'working', degraded: 'error' };
+  const LABEL = { idle: '待机', idle_open: '待机', tracking: '跟随中', orbital: '小球', degraded: '降级' };
 
   M.paintShell = function (snap) {
     const state = snap.state || 'idle';
@@ -25,6 +25,7 @@
     el.textContent = banner;
     el.className = 'banner' + (banner ? ' show' : '');
 
-    $('hint').textContent = state === 'orbital' ? '点小球回到面板' : '点小球可收进屏幕边缘';
+    $('hint').textContent =
+      state === 'orbital' ? '点小球回到面板' : state === 'idle_open' ? '宠物没开也能聊' : '点小球可收进屏幕边缘';
   };
 })();

@@ -169,6 +169,7 @@ CMD_DND = 1006
 
 _STATE_LABEL = {
     "idle": "待机",
+    "idle_open": "待机（面板）",
     "tracking": "跟随中",
     "orbital": "小球",
     "degraded": "降级",
@@ -388,7 +389,10 @@ class Runtime:
         if effect == SHOW_BALL:
             if self._ball is not None:
                 self._ball.show()
-                self._render_frame(0.0)
+                if self._pet is None:
+                    self._render_idle_ball()
+                else:
+                    self._render_frame(0.0)
             return
         if effect == HIDE_BALL:
             if self._ball is not None:
@@ -477,12 +481,52 @@ class Runtime:
             with contextlib.suppress(Exception):
                 win32.show_window(self._panel_hwnd, False)
 
+    def _idle_anchor(self, size: tuple[int, int]) -> tuple[int, int]:
+        """待机（宠物不在）时的定位：光标所在显示器的右下角，留 24px 边距。"""
+        from mascot_win import win32
+
+        cx, cy = win32.cursor_pos()
+        wx, wy, ww, wh = win32.work_area(cx, cy)
+        width, height = size
+        x = wx + ww - width - 24
+        y = wy + wh - height - 24
+        return max(wx, x), max(wy, y)
+
+    def _render_idle_ball(self) -> None:
+        """待机小球：固定在右下角，不绕轨道；点击即可展开面板。"""
+        from mascot_render.ball import render_ball
+
+        if self._ball is None:
+            return
+        image = render_ball(BALL_SIZE, phase=time.time() % 6.0, stuck=self._degraded)
+        self._ball.render(image)
+        half = BALL_SIZE // 2
+        self._ball.set_hit_circle(half, half, half + 2)
+        x, y = self._idle_anchor((BALL_SIZE, BALL_SIZE))
+        self._ball.move(x, y)
+
     def _place_panel(self, *, force: bool = False) -> None:
         from mascot_win import win32
 
-        if self._pet is None or not self._panel_hwnd:
+        if not self._panel_hwnd:
             return
         width, height = self.settings.panel_size
+        if self._pet is None:
+            # 待机面板：钉在右下角（宠物没开也要能用）。
+            # 注意 WebView 窗口的物理尺寸会被 DPI 放大（settings 是逻辑尺寸），
+            # 直接用逻辑尺寸锚定会溢出屏幕右下角，所以优先量真实窗口。
+            try:
+                _px, _py, real_w, real_h = win32.get_window_rect(self._panel_hwnd)
+            except Exception:
+                real_w = real_h = 0
+            if real_w > 0 and real_h > 0:
+                width, height = real_w, real_h
+            x, y = self._idle_anchor((width, height))
+            rect = Rect(x, y, width, height)
+            if force or rect != self._last_panel_rect:
+                win32.move_window_below(self._panel_hwnd, rect.x, rect.y)
+                self._last_panel_rect = rect
+            return
         # 用宠物所在显示器的可用工作区（排除任务栏）；主屏尺寸会把面板从副屏拽回来
         wx, wy, ww, wh = win32.work_area(self._pet.x + self._pet.w // 2, self._pet.y + self._pet.h // 2)
         rect = follow_rect(
@@ -554,6 +598,14 @@ class Runtime:
         self._create_tray()
         boot.mark("tray_ready")
 
+        # 待机也要"看得见"：宠物不在时右下角常驻一颗小球，点它展开面板。
+        # 宠物一出现，PET_FOUND 会把它收起（见 state.py）。
+        boot_ball = self._ball
+        if self._machine.state is State.IDLE and boot_ball is not None:
+            with contextlib.suppress(Exception):
+                boot_ball.show()
+                self._render_idle_ball()
+
         # 后端 I/O（history/health/send）已挪到独立线程：WSL 后端不可达时
         # 每次请求要等满超时（2s），放在工作线程里会拖住从宠物出现到面板出现。
         # 上一次异常退出可能留下 control.json：启动时先清掉，避免"幽灵消息"
@@ -580,6 +632,17 @@ class Runtime:
                         self._poll_pet(tracker)
                         if not self._degraded:
                             self._place_panel()
+
+                ball_now = self._ball
+                if (
+                    not self._frames
+                    and self._machine.state is State.IDLE
+                    and ball_now is not None
+                    and now >= next_frame
+                ):
+                    next_frame = now + 1.0
+                    with contextlib.suppress(Exception):
+                        self._render_idle_ball()
 
                 if self._frames and now >= next_frame:
                     next_frame = now + frame_s
@@ -727,7 +790,7 @@ class Runtime:
                 process=found.process,
                 class_name=found.class_name,
             )
-            if first_seen and self._machine.state is State.IDLE:
+            if first_seen and self._machine.state in (State.IDLE, State.IDLE_OPEN):
                 boot.mark("pet_found")
                 self.post(Event.PET_FOUND)
             return
