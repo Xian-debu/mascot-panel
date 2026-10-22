@@ -26,6 +26,7 @@ from mascot_core.config import Settings, load_settings, merge_hot
 from mascot_core.contract import ChatProvider, Message, SendCancelled
 from mascot_core.geometry import Rect, Screen, angle_for_time, follow_rect, orbit_layout
 from mascot_core.history import dump_history, filter_cleared, merge_history, parse_history
+from mascot_core.paths import state_dir
 from mascot_core.state import (
     CLEAR_DEGRADED,
     HIDE_BALL,
@@ -50,9 +51,7 @@ ALERT_S = 2.5  # 新消息提示环亮多久（秒，M30）
 
 
 def _state_dir() -> Path:
-    local = os.environ.get("LOCALAPPDATA")
-    base = Path(local) if local else Path.home() / ".mascot"
-    return base / "mascot" if local else base
+    return state_dir()
 
 
 def _flags_path() -> Path:

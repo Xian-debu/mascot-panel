@@ -5,13 +5,15 @@ from __future__ import annotations
 import contextlib
 import os
 
+from mascot_core import paths
 from mascot_win import win32
 
 MUTEX_NAME = "Local\\Mascot.SingleInstance"
 
 
 def state_dir() -> str:
-    return os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "mascot")
+    """与 mascot_core.paths.state_dir 同一真源（含 MASCOT_STATE_DIR 覆盖）。"""
+    return str(paths.state_dir())
 
 
 def pid_file_path() -> str:

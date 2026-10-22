@@ -18,10 +18,19 @@
   面板绿点「跟随中」，真实键入「你好」与「你现在用的是哪个模型？」两轮均有回复且上下文连续。
   证据：`evidence/a2-deepseek-chat.png`、`evidence/a2-deepseek-typed.png`；文档 `docs/47-m31-m32-deepseek.md`。
 - Linux 门禁：ruff 0 / pyright 0 / pytest **192 passed, 1 skipped**。
+- **M33（A3）状态目录单一真源**：新增 `src/mascot_core/paths.py` 的 `state_dir()`（`MASCOT_STATE_DIR` > `%LOCALAPPDATA%/mascot` > `~/.mascot`），
+  config/runtime/cli/logging/single 五处全部改走它；`tests/unit/test_paths.py` 4 条。真机用 `MASCOT_STATE_DIR=C:\\Users\\Public\\mascot-devstate-a3` 启动，
+  history/logs/state/pid 全落隔离目录，用户目录不再被写。
+- **用户目录已清理**：`%LOCALAPPDATA%\\mascot\\history.json` 只留 3 条真实对话，验收假消息/`m5-*.png`/残留 state 已删，
+  `runtime.json` 的验收偏移已清；清理前整目录备份到 `%LOCALAPPDATA%\\mascot-backup-20261023-002650`。
+- **安装版已换成新构建**（含 deepseek + A1/A3），并已 `setx DEEPSEEK_AUTH_TOKEN`（用户级）；从开始菜单启动 `state=tracking`、`provider=deepseek`、`degraded=false`，
+  真实键入「安装版测试：请用一句话介绍你自己」→ DeepSeek 回复「你好！我是DeepSeek…」（证据 `evidence/a2-installed.png`）。
+- Linux 门禁：ruff 0 / pyright 0 / pytest **196 passed, 1 skipped**。
+- **交付**：安装版 `mascot.exe` **8031318 字节**（2026-10-23 00:31，含 M31–M33）；`current.txt=0.1.0`，旧版本目录无。
 
-**还没做完（按 roadmap 继续）**：A3 开发/安装状态目录隔离（`MASCOT_STATE_DIR`）→
-B1 本地会话（sessions.json，新建/切换/删除）→ B2 消息操作（复制/编辑/版本/冻结/上下移/合并）→ B3 面板 UX（含安装版 key 录入）。
-另：安装版本轮构建后仍需 `setx` 用户级 key 才能从开始菜单直接聊；用户 `%LOCALAPPDATA%\mascot\history.json` 里我早期验收的假消息待清理。
+**还没做完（按 roadmap 继续）**：A 阶段已全部完成（A1=M31、A2=M32、A3=M33），下一步
+B1 本地会话（sessions.json，新建/切换/删除）→ B2 消息操作（复制/编辑/版本/冻结/上下移/合并）→ B3 面板 UX（含设置页/模型切换/key 录入）。
+安装版 key 已用 `setx DEEPSEEK_AUTH_TOKEN`（用户级）供给，开始菜单启动可直接聊；设置页录入留到 B3。
 
 ## 历史：2026-10-22 夜间交付总结（更新至 M30）
 

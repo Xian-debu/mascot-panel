@@ -4,8 +4,8 @@
 旧实现 `E:\TX-Pet`（483 行单文件壳 + 919 行单文件 SPA，无版本控制）**冻结保留**，本仓库与其零共享代码。
 
 > 规划与决策记录在 `/root/mascot-admin`（管理仓库）。本仓库只承载产品代码。
-> 当前阶段：**M31/M32 路线转向**（降级放行交互 + 直连 DeepSeek，不再依赖本机 8890；key 只读环境变量 `DEEPSEEK_AUTH_TOKEN`）。
-> 此前能力：像素时钟球 + 环绕彗尾 + 面板品牌位 + 托盘 + 免打扰 + 冷启动 0.7s + legacy/auto 聊天后端 + 流式增量与停止生成 + config 写回与 dnd/暂停记忆 + 宠物没开时右下角常驻像素时钟球，可拖动、记忆位置、拖到边缘自动吸附、右键菜单可复位 + 独立面板 + 对话跨重启保留与 ctl clear-history + config 写回保留注释/未知键/表 + 版本目录列举/回收与真回滚 + 改配置热重载 + 历史条数可配置（history_limit 热生效）+ health 独立短超时（降级横幅 1.9s）+ clear-history 连后端 history 一起屏蔽 + 本地目录/zip 就地升级（mascot.exe update）+ 面板启动时真的隐藏、可拖标题栏、跟随态按相对宠物偏移跟随、拖过记住位置并可复位（托盘/菜单/ctl reset-panel）+ 待机球单击开面板、双击回右下角（双击时间窗 click_window_ms 可配置，0 = 单击立即开面板）+ 环绕球双击暂停/恢复公转 + 新消息到达时小球亮像素提示环（状态灯），见 docs/20–47。
+> 当前阶段：**M31/M32/M33 路线转向（A 阶段完成）**：降级放行交互 + 直连 DeepSeek（不再依赖本机 8890，key 只读环境变量 `DEEPSEEK_AUTH_TOKEN`）+ 状态目录单一真源（`MASCOT_STATE_DIR` 隔离开发/验收，安装版仍是 `%LOCALAPPDATA%/mascot`）。
+> 此前能力：像素时钟球 + 环绕彗尾 + 面板品牌位 + 托盘 + 免打扰 + 冷启动 0.7s + legacy/auto 聊天后端 + 流式增量与停止生成 + config 写回与 dnd/暂停记忆 + 宠物没开时右下角常驻像素时钟球，可拖动、记忆位置、拖到边缘自动吸附、右键菜单可复位 + 独立面板 + 对话跨重启保留与 ctl clear-history + config 写回保留注释/未知键/表 + 版本目录列举/回收与真回滚 + 改配置热重载 + 历史条数可配置（history_limit 热生效）+ health 独立短超时（降级横幅 1.9s）+ clear-history 连后端 history 一起屏蔽 + 本地目录/zip 就地升级（mascot.exe update）+ 面板启动时真的隐藏、可拖标题栏、跟随态按相对宠物偏移跟随、拖过记住位置并可复位（托盘/菜单/ctl reset-panel）+ 待机球单击开面板、双击回右下角（双击时间窗 click_window_ms 可配置，0 = 单击立即开面板）+ 环绕球双击暂停/恢复公转 + 新消息到达时小球亮像素提示环（状态灯），见 docs/20–48。
 > 交付形态：单 exe 双入口（双击=GUI，带参数=CLI，`mascot doctor/run/ctl/autostart`）；
 > M5 打包/安装/自启/回滚见 docs/19-m5-delivery.md。
 

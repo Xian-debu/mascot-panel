@@ -24,6 +24,7 @@ from mascot_app.logging_setup import setup_logging
 from mascot_app.providers import make_provider
 from mascot_core import configfile, update, versions
 from mascot_core.config import HOT_FIELDS, Settings, default_config_path, load_settings
+from mascot_core.paths import state_dir
 
 EXIT_OK = 0
 EXIT_ARGS = 2
@@ -53,10 +54,7 @@ def _check(name: str, ok: bool, detail: str, critical: bool = True) -> dict:
 
 
 def _state_dir(settings: Settings) -> Path:
-    local = os.environ.get("LOCALAPPDATA")
-    if local:
-        return Path(local) / "mascot"
-    return Path.home() / ".mascot"
+    return state_dir()
 
 
 def collect_doctor(settings: Settings, probe: bool = True) -> tuple[list[dict], bool]:

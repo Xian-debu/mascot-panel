@@ -12,6 +12,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from mascot_core.paths import state_dir
+
 MAX_BYTES = 1_000_000
 BACKUPS = 3
 
@@ -34,12 +36,7 @@ class JsonFormatter(logging.Formatter):
 
 
 def default_log_dir() -> Path:
-    import os
-
-    local = os.environ.get("LOCALAPPDATA")
-    if local:
-        return Path(local) / "mascot" / "logs"
-    return Path.home() / ".mascot" / "logs"
+    return state_dir() / "logs"
 
 
 def setup_logging(log_dir: Path | None = None, level: str = "INFO") -> Path:

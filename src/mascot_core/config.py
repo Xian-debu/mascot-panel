@@ -16,15 +16,12 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
 )
 
+from mascot_core.paths import state_dir
+
 
 def default_config_path() -> Path:
-    """Windows 上优先 %LOCALAPPDATA%/mascot/config.toml；其他平台走 ~/.mascot。"""
-    import os
-
-    local = os.environ.get("LOCALAPPDATA")
-    if local:
-        return Path(local) / "mascot" / "config.toml"
-    return Path.home() / ".mascot" / "config.toml"
+    """状态目录（MASCOT_STATE_DIR / %LOCALAPPDATA%/mascot / ~/.mascot）下的 config.toml。"""
+    return state_dir() / "config.toml"
 
 
 class Settings(BaseSettings):
