@@ -53,11 +53,14 @@ class Settings(BaseSettings):
     fps: int = Field(default=10, ge=1, le=60)
 
     # 跨环境
-    provider: str = "auto"  # auto：先 legacy 旧契约再 wsl 新契约，见 providers/auto.py
-    provider_base_url: str = "http://127.0.0.1:8890"
-    provider_timeout_s: float = Field(default=2.0, gt=0.1)
-    # health 是启动路径上的串行探测（auto 连探两次），比业务超时更短才不至于拖慢降级
-    health_timeout_s: float = Field(default=0.8, gt=0.05, le=10.0)
+    # deepseek：直连 api.deepseek.com（key 只从环境变量 DEEPSEEK_AUTH_TOKEN 读，见 providers/deepseek.py）；
+    # auto/legacy/wsl 保留给旧后端，null = 纯离线。
+    provider: str = "deepseek"
+    provider_base_url: str = "https://api.deepseek.com"
+    provider_model: str = "deepseek-chat"
+    provider_timeout_s: float = Field(default=120.0, gt=0.1)
+    # health 是启动路径上的串行探测，要容忍公网抖动；仍比业务超时短得多
+    health_timeout_s: float = Field(default=3.0, gt=0.05, le=10.0)
     allow_offline: bool = True
 
     # 日志

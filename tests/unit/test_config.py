@@ -11,7 +11,9 @@ def test_defaults() -> None:
     assert s.follow_offset == (210, -130)
     assert s.lost_frames == 3
     assert s.ball_ratio == 0.34
-    assert s.provider == "auto"
+    assert s.provider == "deepseek"
+    assert s.provider_base_url == "https://api.deepseek.com"
+    assert s.provider_model == "deepseek-chat"
 
 
 def test_env_override(monkeypatch) -> None:

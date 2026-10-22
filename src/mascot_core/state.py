@@ -56,10 +56,23 @@ class Machine:
     state: State = State.IDLE
     resume_state: State | None = None
 
+    # 降级只是"后端发不出消息"，不该吞掉用户交互：这些事件按降级前的状态继续生效，
+    # 状态机本身留在 DEGRADED（横幅、重试逻辑都不变）。
+    _DEGRADED_PASSTHROUGH = frozenset(
+        {Event.PET_FOUND, Event.PET_LOST, Event.CLICK_CLOCK, Event.CLICK_BALL}
+    )
+
     def push(self, event: Event) -> Transition:
         """推进一次，返回转移结果（副作用由调用方执行）。"""
         if event is Event.PROVIDER_DOWN and self.state is not State.DEGRADED:
             self.resume_state = self.state
+        if self.state is State.DEGRADED and event in self._DEGRADED_PASSTHROUGH:
+            base = self.resume_state or State.IDLE
+            inner = transition(base, event)
+            if inner.reason.startswith("IGNORED"):
+                return Transition(State.DEGRADED, f"IGNORED:{event.name}")
+            self.resume_state = inner.state
+            return Transition(State.DEGRADED, f"DEGRADED:{inner.reason}", inner.effects)
         result = transition(self.state, event, self.resume_state)
         self.state = result.state
         if self.state is not State.DEGRADED:

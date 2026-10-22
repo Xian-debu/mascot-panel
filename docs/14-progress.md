@@ -1,6 +1,29 @@
 # 进度报告（自动维护，供明早阅读）
 
-## 明早先读：2026-10-22 夜间交付总结（更新至 M30）
+## 明早先读：2026-10-23 凌晨 路线转向（M31/M32，超越原版阶段 A1/A2）
+
+**你为什么看到旧版还行、新版很糟**：旧版前端（E:\TX-Pet 与 /root/projects/deepseek-chat-rebuild/static/pet-overlay.html）
+有消息编辑/版本切换/冻结/上下移/合并/会话列表，新版 M0–M30 只做了壳层与动效，这些功能一个都没移植；
+而且新版默认后端指向本机 8890（没服务）、没有 key，后端不可达就进 DEGRADED 把 click 全吞掉、还跳过面板跟随——
+所以「跟随没了、切换没了、点了没反应」。
+
+**本轮做了什么（已真机聊通）**：
+- **M31（A1）降级不再吞交互**：`Machine.push()` 在 DEGRADED 下对 CLICK_CLOCK/CLICK_BALL/PET_FOUND/PET_LOST 做内层转移，
+  点时钟照常收进环绕球、点球照常回面板；主循环去掉 `if not self._degraded` 守卫，降级也跟随/恢复面板定位；
+  provider 健康事件只在翻转时推，日志不再刷 `IGNORED:PROVIDER_DOWN`。
+- **M32（A2）直连 DeepSeek**：新 `providers/deepseek.py`，key 只读环境变量 `DEEPSEEK_AUTH_TOKEN`（回退 `DEEPSEEK_API_KEY`），
+  默认 `provider=deepseek`、`base=https://api.deepseek.com`、`model=deepseek-chat`，流式 SSE + 最近 20 轮上下文注入，
+  health 用 GET /models（3s）判 401/403/网络错；不再依赖 8890 Flask，也不落盘 key。
+- **真机自测**（win-admin，隔离 LOCALAPPDATA）：开发版 `state=tracking`、`degraded=false`、宠物=真实 TX Mascot；
+  面板绿点「跟随中」，真实键入「你好」与「你现在用的是哪个模型？」两轮均有回复且上下文连续。
+  证据：`evidence/a2-deepseek-chat.png`、`evidence/a2-deepseek-typed.png`；文档 `docs/47-m31-m32-deepseek.md`。
+- Linux 门禁：ruff 0 / pyright 0 / pytest **192 passed, 1 skipped**。
+
+**还没做完（按 roadmap 继续）**：A3 开发/安装状态目录隔离（`MASCOT_STATE_DIR`）→
+B1 本地会话（sessions.json，新建/切换/删除）→ B2 消息操作（复制/编辑/版本/冻结/上下移/合并）→ B3 面板 UX（含安装版 key 录入）。
+另：安装版本轮构建后仍需 `setx` 用户级 key 才能从开始菜单直接聊；用户 `%LOCALAPPDATA%\mascot\history.json` 里我早期验收的假消息待清理。
+
+## 历史：2026-10-22 夜间交付总结（更新至 M30）
 
 **做完了什么**：按 docs/10-plan.md 推进 M0→M13，产品仓库 /root/mascot
 （骨架 → 纯逻辑层 → CLI/provider → CI/进度 → 部署 → M1 平台 spike → M2 运行时 → M3 渲染 →

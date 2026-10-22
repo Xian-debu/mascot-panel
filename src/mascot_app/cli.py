@@ -140,6 +140,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         settings.allow_offline = args.allow_offline
     if args.provider_url:
         settings.provider_base_url = args.provider_url
+    if getattr(args, "provider_model", None):
+        settings.provider_model = args.provider_model
     setup_logging(settings.log_dir, settings.log_level)
 
     try:
@@ -164,6 +166,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             ("provider", args.provider),
             ("allow_offline", args.allow_offline),
             ("provider_base_url", args.provider_url),
+            ("provider_model", getattr(args, "provider_model", None)),
         )
         if value is not None
     }
@@ -505,7 +508,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     r = sub.add_parser("run", help="启动桌宠")
     r.add_argument("--config", help="显式配置文件路径")
-    r.add_argument("--provider", choices=["auto", "legacy", "wsl", "null"], help="覆盖跨环境 provider")
+    r.add_argument(
+        "--provider",
+        choices=["deepseek", "auto", "legacy", "wsl", "null"],
+        help="覆盖 provider（默认 deepseek 直连公网）",
+    )
+    r.add_argument("--provider-model", help="覆盖模型名（默认 deepseek-chat）")
     r.add_argument(
         "--provider-url",
         help="覆盖 provider 地址（WSL→Windows 互操作会过滤环境变量，验收时必须走参数）",

@@ -550,6 +550,12 @@ class Runtime:
     def _send_streaming(self, text: str) -> Message:
         """有 send_stream 就用流式（面板能看到逐字增长），否则退回一次性 send。"""
         stream = getattr(self.provider, "send_stream", None)
+        # 直连公网的 provider 无后端会话：发送前把面板时间线注入，保证多轮上下文
+        setter = getattr(self.provider, "set_context", None)
+        if callable(setter):
+            with self._lock:
+                context = list(self._messages)
+            setter(context)
         if callable(stream):
             return stream(text, self._on_delta)  # type: ignore[no-any-return]
         return self.provider.send(text)
@@ -1102,8 +1108,8 @@ class Runtime:
                     self._poll_control()
                     if not self._paused:
                         self._poll_pet(tracker)
-                        if not self._degraded:
-                            self._place_panel()
+                        # 降级也要跟随：后端不可达只影响发消息，不影响面板定位（A1）
+                        self._place_panel()
 
                 ball_now = self._ball
                 if (
@@ -1293,10 +1299,13 @@ class Runtime:
         health = self.provider.health()
         if not health.ok:
             self._provider_detail = health.detail or health.reason_code
-            self.post(Event.PROVIDER_DOWN)
+            # 只在状态真的翻转时推事件：否则每 5s 一次 IGNORED:PROVIDER_DOWN 刷爆日志
+            if not self._degraded:
+                self.post(Event.PROVIDER_DOWN)
         else:
             self._provider_detail = ""
-            self.post(Event.PROVIDER_READY)
+            if self._degraded:
+                self.post(Event.PROVIDER_READY)
 
     # ---- 入口 ---------------------------------------------------------------
 
