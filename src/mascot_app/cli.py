@@ -17,7 +17,7 @@ import platform
 import sys
 from pathlib import Path
 
-from mascot_app import __version__
+from mascot_app import __version__, boot
 from mascot_app.logging_setup import setup_logging
 from mascot_app.providers import make_provider
 from mascot_core.config import Settings, default_config_path, load_settings
@@ -344,6 +344,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    boot.mark("cli_main")
     # 双击 exe（无参数）时当作 GUI 启动：默认 run，并藏掉随之弹出的控制台窗口。
     # 同一个 exe 仍支持命令行子命令 —— 打包只出一个文件，用户只有一个入口。
     args_in = list(sys.argv[1:]) if argv is None else list(argv)

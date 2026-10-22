@@ -295,3 +295,15 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 验收：`scripts/verify_m7.py` 12 项全过（托盘窗口存在、双击互切、pause/resume、status、stop、退出码 0）；
   证据 `evidence/m7-tray-menu.png`；Linux ruff 0 / pyright 0 / pytest 全绿。
 - 细节与坑（菜单阻塞消息泵、验收脚本读到旧 state.json）见 `docs/23-m7-tray.md`。
+### M8 冷启动（2026-10-22 夜）
+
+- 新增 `src/mascot_app/boot.py`（T0 + mark/marks，snapshot 输出 `boot` 字段）与
+  `scripts/measure_start.py`（清状态 → Popen → 轮询 boot → 记 spawn→面板耗时 → ctl stop）。
+- 基线暴露真因：工作线程同步等后端（`_load_history` 2s、每轮 `_poll_provider` 2s、`_drain_sends` 同步发送），
+  pet_found 2.1s / state_tracking 4.1s，面板从未出现。
+- 重构：后端 I/O 全部移出工作线程，新增 `mascot-history` / `mascot-sender` / `mascot-provider` 三个 daemon 线程；
+  工作线程只做状态机、跟随、渲染、消息泵。
+- 结果（frozen onedir，3 轮）：spawn→面板可见 **703/705/701 ms**（安装版 868/706/713 ms），此前 4.34 s；
+  DoD ≤2 s 达成。降级横幅仍约 2.1s 出现（health 超时在独立线程）。
+- 回归：Linux ruff 0 / pyright 0 / pytest 全绿；Windows `verify_m4.py` 9 项 PASS、`verify_m7.py` 12 项全过；
+  安装版无参启动截图 `evidence/m8-installed.png`。细节见 `docs/24-m8-startup.md`。

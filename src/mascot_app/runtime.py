@@ -20,6 +20,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+from mascot_app import boot
 from mascot_core.config import Settings
 from mascot_core.contract import ChatProvider, Message
 from mascot_core.geometry import Rect, Screen, angle_for_time, follow_rect, orbit_layout
@@ -199,6 +200,7 @@ class Runtime:
                 "paused": self._paused,
                 "autostart": _autostart_enabled(),
                 "messages": [m.to_dict() for m in self._messages[-MESSAGE_LIMIT:]],
+                "boot": boot.marks(),
             }
 
     # ---- 事件投递 -----------------------------------------------------------
@@ -266,6 +268,7 @@ class Runtime:
     def _apply(self, tr: Transition) -> None:
         with self._lock:
             self._reason = tr.reason
+        boot.mark(f"state_{tr.state.value}")
         log.info("state", extra={"state": tr.state.value, "detail": tr.reason})
         for effect in tr.effects:
             try:
@@ -363,6 +366,7 @@ class Runtime:
         if hwnd:
             win32.add_toolwindow(hwnd)
             self._panel_hwnd = hwnd
+            boot.mark("panel_hwnd")
         return hwnd
 
     def _place_panel(self, *, force: bool = False) -> None:
@@ -422,12 +426,14 @@ class Runtime:
         from mascot_win.layered import LayeredWindow
         from mascot_win.tracker import PetTracker
 
+        boot.mark("worker_start")
         win32.enable_dpi_awareness()
         tracker = PetTracker(
             class_names=(self.settings.pet_window_class,),
             process_names=self.settings.pet_process_names,
             lost_frames=self.settings.lost_frames,
         )
+        boot.mark("worker_dpi")
         self._ball = LayeredWindow(
             BALL_SIZE,
             BALL_SIZE,
@@ -435,9 +441,12 @@ class Runtime:
             start_hidden=True,
             on_click=lambda: self.post(Event.CLICK_BALL),
         )
+        boot.mark("ball_ready")
         self._create_tray()
+        boot.mark("tray_ready")
 
-        self._load_history()
+        # 后端 I/O（history/health/send）已挪到独立线程：WSL 后端不可达时
+        # 每次请求要等满超时（2s），放在工作线程里会拖住从宠物出现到面板出现。
         # 上一次异常退出可能留下 control.json：启动时先清掉，避免"幽灵消息"
         with contextlib.suppress(OSError):
             (_state_dir() / "control.json").unlink()
@@ -446,7 +455,6 @@ class Runtime:
         frame_s = 1.0 / self.settings.fps
         next_poll = 0.0
         next_frame = 0.0
-        last_provider_check = 0.0
         last_state_write = 0.0
 
         try:
@@ -454,7 +462,6 @@ class Runtime:
                 now = time.monotonic()
                 self._ball.pump()
                 self._drain_events()
-                self._drain_sends()
                 self._drain_commands()
 
                 if now >= next_poll:
@@ -468,10 +475,6 @@ class Runtime:
                 if self._frames and now >= next_frame:
                     next_frame = now + frame_s
                     self._render_frame(now - self._orbit_t0)
-
-                if now - last_provider_check >= 5.0:
-                    last_provider_check = now
-                    self._poll_provider()
 
                 # 状态文件每秒刷新：ctl status / 验收脚本才能看到 uptime、消息与 sending
                 if now - last_state_write >= 1.0:
@@ -602,6 +605,7 @@ class Runtime:
                 class_name=found.class_name,
             )
             if first_seen and self._machine.state is State.IDLE:
+                boot.mark("pet_found")
                 self.post(Event.PET_FOUND)
             return
         # 丢失：跟随态立刻收起面板；环绕态保留最后位置，避免球突然消失
@@ -657,6 +661,9 @@ class Runtime:
         )
 
         threading.Thread(target=self._worker, name="mascot-runtime", daemon=True).start()
+        threading.Thread(target=self._history_loop, name="mascot-history", daemon=True).start()
+        threading.Thread(target=self._sender_loop, name="mascot-sender", daemon=True).start()
+        threading.Thread(target=self._provider_loop, name="mascot-provider", daemon=True).start()
         if demo:
             threading.Thread(target=self._demo_script, name="mascot-demo", daemon=True).start()
         if duration_s > 0 or screenshot:
@@ -667,9 +674,34 @@ class Runtime:
                 daemon=True,
             ).start()
 
-        webview.start(gui=gui)  # type: ignore[arg-type]  # 主线程，阻塞到窗口关闭
+        webview.start(gui=gui, func=self._on_gui_start)  # type: ignore[arg-type]  # 主线程，阻塞到窗口关闭
         self._stop.set()
         return 0
+
+    # ---- 后端 I/O 线程 ------------------------------------------------------
+
+    def _history_loop(self) -> None:
+        self._load_history()
+
+    def _sender_loop(self) -> None:
+        """发消息串行化：一次只有一个 send 在飞，网络等待不占工作线程。"""
+        while not self._stop.is_set():
+            with self._lock:
+                pending = bool(self._send_queue) and not self._sending
+            if pending:
+                self._drain_sends()
+            else:
+                time.sleep(0.01)
+
+    def _provider_loop(self) -> None:
+        while not self._stop.is_set():
+            self._poll_provider()
+            deadline = time.monotonic() + 5.0
+            while not self._stop.is_set() and time.monotonic() < deadline:
+                time.sleep(0.05)
+
+    def _on_gui_start(self) -> None:
+        boot.mark("webview_started")
 
     def _demo_script(self) -> None:
         """自动化验收用：2s 收进小球，6s 回到面板。"""
