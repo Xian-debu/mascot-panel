@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import time
+
 from PIL import Image
 
 from mascot_render.ball import render_badge, render_ball
+from mascot_render.clock import render_clock
 
 
 def snapshot_cases() -> dict[str, Image.Image]:
@@ -15,6 +18,13 @@ def snapshot_cases() -> dict[str, Image.Image]:
     cases["ball-stuck"] = render_ball(96, phase=0.0, stuck=True)
     for state in ("idle", "working", "awaiting", "error"):
         cases[f"badge-{state}"] = render_badge(18, state=state)
+    for label, hour, minute in (("1010", 10, 10), ("1545", 15, 45), ("1200", 12, 0)):
+        cases[f"clock-{label}"] = render_clock(
+            128, now=time.struct_time((2026, 10, 22, hour, minute, 0, 3, 295, -1)), now_ts=0.0
+        )
+    cases["clock-stuck"] = render_clock(
+        128, now=time.struct_time((2026, 10, 22, 10, 10, 0, 3, 295, -1)), now_ts=0.0, stuck=True
+    )
     return cases
 
 

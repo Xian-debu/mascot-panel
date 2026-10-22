@@ -254,3 +254,12 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 未做代码签名；未做自动更新（升级靠再跑 install-win.sh）。
 - 旧版本目录不自动回收（保留回滚能力），后续可加 `mascot gc`。
 - 面板立绘/图标资源仍引用旧项目目录，后续需迁入本仓库。
+
+## M6 视觉对齐（2026-10-22 晚，用户反馈后）
+
+- 新增 `src/mascot_render/clock.py`：移植原版像素时钟球（44 格、硬色阶、NEAREST、
+  指针/刻度/星光/发光），调色板进 `tokens.PIXEL` / `PIXEL_AMBER`；球径 96→128。
+- 修 `--provider null` 被标降级的语义 bug（降级只表达“配了后端但连不上”）。
+- 验证：Linux 84 passed / ruff 0 / pyright 0；Windows 84 passed（1 skip）；
+  真机环绕态截图 `evidence/m6-orbital.png`；快照 13 个用例。
+- 细节与下一步（彗尾、面板美术）见 `docs/20-m6-visual.md`。

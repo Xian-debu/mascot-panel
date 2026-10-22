@@ -31,6 +31,30 @@ SPACING: dict[str, int] = {"s1": 4, "s2": 8, "s3": 12, "s4": 16}
 RADIUS: dict[str, int] = {"r-card": 10, "r-panel": 14}
 MOTION_MS: dict[str, int] = {"fast": 120, "base": 200}
 
+# 像素时钟球的硬色阶：像素语言需要明确的 5 个色阶，不能靠 alpha 渐变。
+# 取自原版 orbital_render 的调色板（用户认可的视觉基线），state=降级时换琥珀家族。
+PIXEL: dict[str, str] = {
+    "edge": "#081a2e",
+    "mid": "#165c7c",
+    "hi": "#4096b2",
+    "core": "#96e6f0",
+    "cyan": "#00d4d4",
+    "cyan-bright": "#00ebff",
+    "white": "#ebfcff",
+    "navy": "#061222",
+}
+
+PIXEL_AMBER: dict[str, str] = {
+    "edge": "#2e1f08",
+    "mid": "#7c5a16",
+    "hi": "#b28a40",
+    "core": "#f0e096",
+    "cyan": "#d4a400",
+    "cyan-bright": "#ffd000",
+    "white": "#fffceb",
+    "navy": "#221606",
+}
+
 
 # 由主色派生出的半透明变体：CSS 里的描边/底色不再手写 rgba，改颜色只改 COLORS。
 ALPHA_VARS: dict[str, tuple[str, float]] = {

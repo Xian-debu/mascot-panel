@@ -41,7 +41,7 @@ from mascot_core.tokens import css_variables
 log = logging.getLogger(__name__)
 
 PANEL_TITLE = "mascot-panel"
-BALL_SIZE = 96
+BALL_SIZE = 128
 
 
 def _state_dir() -> Path:
@@ -345,7 +345,7 @@ class Runtime:
     # ---- 帧 ---------------------------------------------------------------
 
     def _render_frame(self, t: float) -> None:
-        from mascot_render.ball import render_ball
+        from mascot_render.clock import render_clock
 
         if self._ball is None:
             return
@@ -354,7 +354,8 @@ class Runtime:
             return
         pet_rect = Rect(pet.x, pet.y, pet.w, pet.h)
         angle = angle_for_time(t, self.settings.orbit_period_s, self.settings.orbit_speed)
-        image = render_ball(BALL_SIZE, phase=angle, stuck=self._machine.state is State.DEGRADED)
+        # 像素时钟球（原版视觉基线）：时间由渲染器自己读系统时钟。
+        image = render_clock(BALL_SIZE, stuck=self._machine.state is State.DEGRADED)
         x, y = ball_pos(
             angle, pet_rect, self.settings.ball_ratio, self.settings.orbit_gap, BALL_SIZE
         )
@@ -458,7 +459,13 @@ class Runtime:
 
         allow_offline 的语义是“后端不可用时仍让桌宠继续工作”，
         不是“装作后端没问题”——早期实现反了，默认配置下永远看不到降级横幅。
+
+        例外：显式 `--provider null` 表示“本次就是不要后端”，此时探测只会把
+        自己标成降级，属于自欺欺人的噪声（2026-10-22 截图里 null 演示全变降级）。
         """
+        if self.provider.name == "null":
+            self._provider_detail = "null provider（显式离线模式）"
+            return
         health = self.provider.health()
         if not health.ok:
             self._provider_detail = health.detail or health.reason_code
