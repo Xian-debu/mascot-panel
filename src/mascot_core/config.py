@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     fps: int = Field(default=10, ge=1, le=60)
 
     # 跨环境
-    provider: str = "wsl"
+    provider: str = "auto"  # auto：先 legacy 旧契约再 wsl 新契约，见 providers/auto.py
     provider_base_url: str = "http://127.0.0.1:8890"
     provider_timeout_s: float = Field(default=2.0, gt=0.1)
     allow_offline: bool = True

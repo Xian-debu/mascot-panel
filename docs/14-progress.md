@@ -322,3 +322,15 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 验收：`scripts/verify_m9.py` 8 项全过（DND 开关、面板隐藏/恢复、手动优先、stop）；
   Windows 全量 93 passed / 1 skipped；Linux ruff 0 / pyright 0 / pytest 87 passed。
   细节见 `docs/25-m9-dnd.md`。
+### M10 接上真实后端（2026-10-22 深夜）
+
+- 现实里没有任何服务实现新契约 `/api/pet/{health,history,send}`；唯一存在的是旧
+  `deepseek-chat-rebuild` 的 `/api/pet/{status,news,ask}`（新闻格式 + SSE）。
+- 新增 `providers/legacy.py`（翻译层：title 前缀定 role、SSE 分片拼接、`[SESSION:]` 延续会话、
+  `engine=missing` 降级）与 `providers/auto.py`（先 legacy 再新契约，选中即记住）。
+- `Settings.provider` 默认改 `"auto"`；`ctl status` 补 `provider`/`provider_detail`/`paused`/`dnd`。
+- 新增 `scripts/dev-legacy-backend.py`（假旧后端）、`scripts/verify_m10.py`（9 项）。
+- 验收：真实 Windows 上 `verify_m10.py` 9/9 PASS（auto 认领 legacy、历史两条、SSE 拼接、未降级、stop）；
+  `verify_m7.py` 12 项回归全过；无后端时降级文案为「legacy timed out」；截图
+  `evidence/m10-chat.png`、`evidence/m10-degraded.png`。Linux ruff 0 / pyright 0 / pytest 95 passed。
+- 遗留：真旧后端未实测（需 API Key）、历史无真实时间戳、无流式增量渲染。细节见 `docs/26-m10-backend.md`。

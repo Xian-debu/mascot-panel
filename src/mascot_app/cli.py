@@ -233,6 +233,10 @@ def cmd_ctl(args: argparse.Namespace) -> int:
                     "pid": pid,
                     "state": state.get("state", "stopped" if pid is None else "unknown"),
                     "degraded": state.get("degraded", False),
+                    "provider": state.get("provider"),
+                    "provider_detail": state.get("provider_detail", ""),
+                    "paused": state.get("paused", False),
+                    "dnd": state.get("dnd", False),
                     "pet": state.get("pet"),
                     "uptime_s": state.get("uptime_s"),
                     "sending": state.get("sending", False),
@@ -320,7 +324,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     r = sub.add_parser("run", help="启动桌宠")
     r.add_argument("--config", help="显式配置文件路径")
-    r.add_argument("--provider", choices=["wsl", "null"], help="覆盖跨环境 provider")
+    r.add_argument("--provider", choices=["auto", "legacy", "wsl", "null"], help="覆盖跨环境 provider")
     r.add_argument(
         "--provider-url",
         help="覆盖 provider 地址（WSL→Windows 互操作会过滤环境变量，验收时必须走参数）",

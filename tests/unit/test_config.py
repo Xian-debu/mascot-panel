@@ -11,7 +11,7 @@ def test_defaults() -> None:
     assert s.follow_offset == (210, -130)
     assert s.lost_frames == 3
     assert s.ball_ratio == 0.34
-    assert s.provider == "wsl"
+    assert s.provider == "auto"
 
 
 def test_env_override(monkeypatch) -> None:
