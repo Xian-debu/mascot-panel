@@ -1,13 +1,13 @@
 # 进度报告（自动维护，供明早阅读）
 
-## 明早先读：2026-10-22 夜间交付总结（更新至 M13）
+## 明早先读：2026-10-22 夜间交付总结（更新至 M14）
 
 **做完了什么**：按 docs/10-plan.md 推进 M0→M13，产品仓库 /root/mascot
 （骨架 → 纯逻辑层 → CLI/provider → CI/进度 → 部署 → M1 平台 spike → M2 运行时 → M3 渲染 →
 M4 面板与聊天 → M5 打包交付 → M6a/b/c 视觉对齐（像素时钟球/彗尾/品牌位）→ M7 托盘 →
 M8 冷启动 → M9 免打扰与多屏定位 → M10 接上旧聊天后端 → M11 流式增量与停止生成 →
-M12 配置写回与开关持久化 → M13 待机形态）。
-管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019 见当天提交）。
+M12 配置写回与开关持久化 → M13 待机形态 → M14 待机球像素时钟化/可拖动/记忆位置）。
+管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020 见当天提交）。
 
 **现在能做什么**（Windows 上已装好）：
 ```
@@ -23,7 +23,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 
 **验证过的硬事实**：
 - Linux：ruff 0 / pyright 0 / pytest 全绿；Windows：全量回归通过；M10 验收 9/9、M11 验收 15/15、
-  M12 验收 16/16、M13 验收 10/10 PASS。
+  M12 验收 16/16、M13 验收 10/10、M14 验收 9/9 PASS。
 - 真机跟随 TX-Pet 窗口（961,459 / 1616,272，随窗口移动）、面板与环绕球同进程共存、ctl 全动作可用、
   托盘菜单与双击互切可用、安装/卸载/回滚/双跑/自启逐个跑过（evidence/m5-*、m6*、m7-*、m8-*、m9 验收输出）。
 - 冷启动 **进程创建→面板可见 0.70 s**（安装版 0.71–0.87 s），此前 4.34 s；DoD ≤2 s 已达成（docs/24）。
@@ -386,3 +386,25 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
   验收脚本自己也要 `enable_dpi_awareness()` 否则 work_area 返回逻辑坐标。
 - 遗留：待机球仍是渐变球（未换像素时钟）、不可拖动、面板 idle 位置不记忆。
 
+
+### M14 待机球：像素时钟 + 可拖动 + 位置记忆（2026-10-22 深夜）
+
+- 痛点（M13 遗留三条）：待机球还是 M3 渐变球、与轨道球风格不统一；球钉死右下角不可拖动；
+  重启不记忆位置。
+- 渲染：`_render_idle_ball` 改用 `render_clock(BALL_SIZE, now_ts=time.time(), stuck=self._degraded)`，
+  指针按真实时间走，降级时指针停住，与轨道球完全同款。
+- 拖动：`LayeredWindow` 加 `enable_drag/disable_drag`，`WM_LBUTTONDOWN` → `SetCapture`，
+  `WM_MOUSEMOVE` 算位移（>3px 才算拖动），`WM_LBUTTONUP` 按是否移动分流到 `on_drag_end` 或 `on_click`。
+  在拖动时夹到当前屏工作区内。只有待机球启用（轨道球是动画）。
+- 位置记忆：`runtime.json` 加 `ball_pos`，`load_ball_pos`/`save_ball_pos`；`save_flags` 改读-改-写，
+  不冲掉其它键；`_idle_anchor` 优先用 `ball_pos`，但必须落在某块屏工作区内才用；面板仍贴右下角。
+- 验收：`scripts/verify_m14.py` 9 项全过（真实鼠标注入拖动 → 球移动 -160/-120、state 仍 idle、
+  `ball_pos` 落盘、拖完再点仍开面板、重启位置恢复）。`verify_m13.py` 回归 10/10。
+  Linux ruff 0 / pyright 0 / pytest 全绿。截图 `evidence/m14-ball-zoom.png`、
+  `m14-idle-ball.png`、`m14-dragged.png`。细节见 `docs/30-m14-idle-ball.md`。
+- 关键坑：**`WM_LBUTTONDOWN` 的 lparam 是客户区坐标**，`_inside_hit_circle` 却按屏幕坐标解释
+  （那是 `WM_NCHITTEST` 的语义），于是拖动分支永不进入；而 `WM_LBUTTONUP` 没命中判断，
+  点击开面板一直正常，把问题掩盖成“拖动无效但点击正常”。修法：DOWN 分支不再做命中判断。
+- 遗留：拖动无边缘吸附/双击复位；待机球无右键菜单；面板 idle 位置仍不跟随球。
+- 交付：`dist/mascot/mascot.exe`（7.7M）重建，`install-win.sh` 已装到
+  `C:/Users/ZYX/AppData/Local/mascot/app/0.1.0`（`current.txt=0.1.0`），安装版 `mascot.exe doctor` 体检通过。

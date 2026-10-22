@@ -27,6 +27,9 @@ GWL_EXSTYLE = -20
 WM_CLOSE = 0x0010
 WM_LBUTTONDOWN = 0x0201
 WM_LBUTTONUP = 0x0202
+WM_MOUSEMOVE = 0x0200
+MOUSEEVENTF_LEFTDOWN = 0x0002
+MOUSEEVENTF_LEFTUP = 0x0004
 SW_HIDE = 0
 SW_SHOWNOACTIVATE = 4
 SWP_ASYNCWINDOWPOS = 0x4000
@@ -168,6 +171,15 @@ def _declare_64bit_safe_prototypes() -> None:
     k.GetModuleHandleW.restype = wt.HMODULE
     u.ShowWindow.argtypes = [wt.HWND, ctypes.c_int]
     u.GetCursorPos.argtypes = [ctypes.POINTER(wt.POINT)]
+    u.GetCursorPos.restype = wt.BOOL
+    u.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
+    u.SetCursorPos.restype = wt.BOOL
+    u.SetCapture.argtypes = [wt.HWND]
+    u.SetCapture.restype = wt.HWND
+    u.ReleaseCapture.argtypes = []
+    u.ReleaseCapture.restype = wt.BOOL
+    u.mouse_event.argtypes = [wt.DWORD, wt.DWORD, wt.DWORD, wt.DWORD, ctypes.c_size_t]
+    u.mouse_event.restype = None
     u.GetWindowLongPtrW.argtypes = [wt.HWND, ctypes.c_int]
     u.GetWindowLongPtrW.restype = ctypes.c_ssize_t
     u.SetWindowLongPtrW.argtypes = [wt.HWND, ctypes.c_int, ctypes.c_ssize_t]
@@ -278,6 +290,29 @@ def cursor_pos() -> tuple[int, int]:
     pt = wt.POINT()
     _user32.GetCursorPos(ctypes.byref(pt))
     return int(pt.x), int(pt.y)
+
+
+def set_capture(hwnd: int) -> int:
+    """把鼠标捕获交给该窗口：拖动时鼠标移出窗口也能收到 WM_MOUSEMOVE。"""
+    _require_windows()
+    return int(_user32.SetCapture(wt.HWND(hwnd)) or 0)
+
+
+def release_capture() -> None:
+    _require_windows()
+    _user32.ReleaseCapture()
+
+
+def set_cursor_pos(x: int, y: int) -> bool:
+    _require_windows()
+    return bool(_user32.SetCursorPos(int(x), int(y)))
+
+
+def mouse_left(down: bool) -> None:
+    """真正注入一次左键按下/抬起（验收脚本用；应用内点击来自系统消息）。"""
+    _require_windows()
+    flag = MOUSEEVENTF_LEFTDOWN if down else MOUSEEVENTF_LEFTUP
+    _user32.mouse_event(flag, 0, 0, 0, 0)
 
 
 def window_dpi(hwnd: int = 0) -> int:

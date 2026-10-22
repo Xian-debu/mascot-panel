@@ -56,15 +56,30 @@ def _flags_path() -> Path:
     return _state_dir() / "runtime.json"
 
 
-def load_flags() -> dict[str, bool]:
-    """读上次退出时的开关（免打扰/暂停）。文件坏了就当没有，绝不因此启动失败。"""
-    path = _flags_path()
+def _read_runtime() -> dict[str, Any]:
+    """读 runtime.json（上次运行状态）。文件坏了就当空的，绝不因此启动失败。"""
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = json.loads(_flags_path().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    if not isinstance(raw, dict):
-        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _write_runtime(data: dict[str, Any]) -> None:
+    """原子写回 runtime.json；失败只记日志（写不了不应该影响桌宠本体）。"""
+    path = _flags_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False) + chr(10), encoding="utf-8")
+        tmp.replace(path)
+    except OSError as exc:
+        log.warning("flags: 写入失败 %s: %s", path, exc)
+
+
+def load_flags() -> dict[str, bool]:
+    """读上次退出时的开关（免打扰/暂停）。"""
+    raw = _read_runtime()
     flags: dict[str, bool] = {}
     for key in ("dnd", "paused"):
         value = raw.get(key)
@@ -73,19 +88,30 @@ def load_flags() -> dict[str, bool]:
     return flags
 
 
+def load_ball_pos() -> tuple[int, int] | None:
+    """上次拖到的待机球位置；坏数据当没有。"""
+    value = _read_runtime().get("ball_pos")
+    if (
+        isinstance(value, list)
+        and len(value) == 2
+        and all(isinstance(v, int) for v in value)
+    ):
+        return int(value[0]), int(value[1])
+    return None
+
+
+def save_ball_pos(pos: tuple[int, int]) -> None:
+    raw = _read_runtime()
+    raw["ball_pos"] = [int(pos[0]), int(pos[1])]
+    _write_runtime(raw)
+
+
 def save_flags(*, dnd: bool, paused: bool) -> None:
-    """原子写回开关；失败只记日志（写不了不应该影响桌宠本体）。"""
-    path = _flags_path()
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".json.tmp")
-        tmp.write_text(
-            json.dumps({"dnd": dnd, "paused": paused}, ensure_ascii=False) + chr(10),
-            encoding="utf-8",
-        )
-        tmp.replace(path)
-    except OSError as exc:
-        log.warning("flags: 写入失败 %s: %s", path, exc)
+    """写回开关，保留同一文件里的其它键（如 ball_pos）。"""
+    raw = _read_runtime()
+    raw["dnd"] = dnd
+    raw["paused"] = paused
+    _write_runtime(raw)
 
 
 TOKENS_PLACEHOLDER = "/*__TOKENS__*/"
@@ -223,6 +249,8 @@ class Runtime:
         self._cancel = threading.Event()
         flags = load_flags()
         self._paused = bool(flags.get("paused", False))
+        # 待机球位置：用户拖过就记住（宠物不在时也不回角落）
+        self._ball_pos: tuple[int, int] | None = load_ball_pos()
         # 免打扰：不自动弹出面板（仍跟随、仍可手动打开）；跨重启记住
         self._dnd = bool(flags.get("dnd", False))
         self._commands: list[str] = []
@@ -401,6 +429,8 @@ class Runtime:
         if effect == START_FRAMES:
             self._frames = True
             self._orbit_t0 = time.monotonic()
+            if self._ball is not None:
+                self._ball.disable_drag()
             return
         if effect == STOP_FRAMES:
             self._frames = False
@@ -485,6 +515,19 @@ class Runtime:
         """待机（宠物不在）时的定位：光标所在显示器的右下角，留 24px 边距。"""
         from mascot_win import win32
 
+        width, height = size
+        if self._ball_pos is not None:
+            # 用户拖过：只要还在某块屏幕的工作区内就尊重它（否则回落到右下角）
+            bx, by = self._ball_pos
+            wx, wy, ww, wh = win32.work_area(bx + width // 2, by + height // 2)
+            if wx <= bx <= wx + ww - 8 and wy <= by <= wy + wh - 8:
+                return bx, by
+        return self._bottom_right((width, height))
+
+    def _bottom_right(self, size: tuple[int, int]) -> tuple[int, int]:
+        """光标所在显示器的工作区右下角，留 24px 边距。"""
+        from mascot_win import win32
+
         cx, cy = win32.cursor_pos()
         wx, wy, ww, wh = win32.work_area(cx, cy)
         width, height = size
@@ -494,16 +537,36 @@ class Runtime:
 
     def _render_idle_ball(self) -> None:
         """待机小球：固定在右下角，不绕轨道；点击即可展开面板。"""
-        from mascot_render.ball import render_ball
+        from mascot_render.clock import render_clock
 
         if self._ball is None:
             return
-        image = render_ball(BALL_SIZE, phase=time.time() % 6.0, stuck=self._degraded)
+        # 与轨道球同一套像素时钟（M14）：待机不该是"另一种球"
+        image = render_clock(
+            BALL_SIZE, now_ts=time.time(), stuck=self._degraded, hover=False
+        )
         self._ball.render(image)
         half = BALL_SIZE // 2
         self._ball.set_hit_circle(half, half, half + 2)
+        self._ball.enable_drag(self._on_ball_drag, self._on_ball_drag_end)
         x, y = self._idle_anchor((BALL_SIZE, BALL_SIZE))
         self._ball.move(x, y)
+
+    def _on_ball_drag(self, x: int, y: int) -> None:
+        """拖动回调：夹到工作区内，并记住位置（下一帧重渲染不会弹回角落）。"""
+        from mascot_win import win32
+
+        wx, wy, ww, wh = win32.work_area(x + BALL_SIZE // 2, y + BALL_SIZE // 2)
+        x = min(max(wx, x), wx + ww - BALL_SIZE)
+        y = min(max(wy, y), wy + wh - BALL_SIZE)
+        self._ball_pos = (x, y)
+        if self._ball is not None:
+            self._ball.move(x, y)
+
+    def _on_ball_drag_end(self, x: int, y: int, moved: bool) -> None:
+        if moved:
+            self._ball_pos = (x, y)
+            save_ball_pos((x, y))
 
     def _place_panel(self, *, force: bool = False) -> None:
         from mascot_win import win32
@@ -521,7 +584,7 @@ class Runtime:
                 real_w = real_h = 0
             if real_w > 0 and real_h > 0:
                 width, height = real_w, real_h
-            x, y = self._idle_anchor((width, height))
+            x, y = self._bottom_right((width, height))
             rect = Rect(x, y, width, height)
             if force or rect != self._last_panel_rect:
                 win32.move_window_below(self._panel_hwnd, rect.x, rect.y)

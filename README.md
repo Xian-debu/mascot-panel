@@ -4,7 +4,7 @@
 旧实现 `E:\TX-Pet`（483 行单文件壳 + 919 行单文件 SPA，无版本控制）**冻结保留**，本仓库与其零共享代码。
 
 > 规划与决策记录在 `/root/mascot-admin`（管理仓库）。本仓库只承载产品代码。
-> 当前阶段：**M13 待机形态**（像素时钟球 + 环绕彗尾 + 面板品牌位 + 托盘 + 免打扰 + 冷启动 0.7s + legacy/auto 聊天后端 + 流式增量与停止生成 + config 写回与 dnd/暂停记忆 + 宠物没开时右下角常驻小球与独立面板，见 docs/20–29）。
+> 当前阶段：**M14 待机球增强**（像素时钟球 + 环绕彗尾 + 面板品牌位 + 托盘 + 免打扰 + 冷启动 0.7s + legacy/auto 聊天后端 + 流式增量与停止生成 + config 写回与 dnd/暂停记忆 + 宠物没开时右下角常驻像素时钟球，可拖动且记忆位置 + 独立面板，见 docs/20–30）。
 > 交付形态：单 exe 双入口（双击=GUI，带参数=CLI，`mascot doctor/run/ctl/autostart`）；
 > M5 打包/安装/自启/回滚见 docs/19-m5-delivery.md。
 
@@ -30,7 +30,7 @@ tests/unit/         纯逻辑单测         tests/snapshot/  像素基线
 tests/platform/     Win32 平台测试     tests/contract/  provider 契约
 scripts/            deploy-win.sh（Windows 开发副本）、build-win.sh/install-win.sh/uninstall-win.sh（打包/安装/卸载）、
                     verify_m2.py/verify_m4.py/verify_m7.py/verify_m9.py/verify_m10.py/verify_m11.py/
-                    verify_m12.py/verify_m13.py、
+                    verify_m12.py/verify_m13.py/verify_m14.py、
                     dev-chat-backend.py/dev-legacy-backend.py、make_baselines.py、measure_start.py
 packaging/          PyInstaller 入口与 spec（entry.py / mascot.spec）
 ```

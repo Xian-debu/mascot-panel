@@ -86,6 +86,13 @@ class LayeredWindow:
         # 命中圆：整帧窗口很大（轨道直径），只有球体所在圆可点，其余穿透
         self._hit_circle: tuple[int, int, int] | None = None
         self._pos: tuple[int, int] = (0, 0)
+        # 拖动：只有待机球启用（轨道球是动画，拖它没有意义）
+        self._draggable = False
+        self._on_drag: Callable[[int, int], None] | None = None
+        self._on_drag_end: Callable[[int, int, bool], None] | None = None
+        self._dragging = False
+        self._drag_moved = False
+        self._drag_start: tuple[int, int, int, int] = (0, 0, 0, 0)
         if not start_hidden:
             win32._user32.ShowWindow(wt.HWND(self.hwnd), win32.SW_SHOWNOACTIVATE)
 
@@ -101,7 +108,37 @@ class LayeredWindow:
             if self._hit_circle is not None:
                 return win32.HTTRANSPARENT
             return win32.HTCLIENT
+        # 注意：WM_LBUTTONDOWN 的 lparam 是客户区坐标，不能喂给 _inside_hit_circle
+        # （它按屏幕坐标解释 lparam，那是 WM_NCHITTEST 的语义）。消息能到达这里
+        # 就说明 NCHITTEST 已经放行（命中圆内），无需再判一次。
+        if msg == win32.WM_LBUTTONDOWN and self._draggable:
+            win32.set_capture(self.hwnd)
+            self._dragging = True
+            self._drag_moved = False
+            cx, cy = win32.cursor_pos()
+            self._drag_start = (cx, cy, self._pos[0], self._pos[1])
+            return 0
+        if msg == win32.WM_MOUSEMOVE and self._dragging:
+            cx, cy = win32.cursor_pos()
+            sx, sy, wx, wy = self._drag_start
+            dx, dy = cx - sx, cy - sy
+            if abs(dx) > 3 or abs(dy) > 3:
+                self._drag_moved = True
+            if self._drag_moved and self._on_drag is not None:
+                self._on_drag(wx + dx, wy + dy)
+            return 0
         if msg == win32.WM_LBUTTONUP:
+            if self._dragging:
+                # 抬起既可能是"点一下"，也可能是"拖完松手"：用位移阈值区分，
+                # 否则每次拖动都会顺手把面板弹出来。
+                self._dragging = False
+                win32.release_capture()
+                moved = self._drag_moved
+                if moved and self._on_drag_end is not None:
+                    self._on_drag_end(self._pos[0], self._pos[1], True)
+                elif not moved and self._on_click is not None:
+                    self._on_click()
+                return 0
             if self._on_click is not None:
                 self._on_click()
             return 0
@@ -185,6 +222,24 @@ class LayeredWindow:
     def move(self, x: int, y: int) -> None:
         self._pos = (int(x), int(y))
         win32.move_window(self.hwnd, int(x), int(y))
+
+    def enable_drag(
+        self,
+        on_drag: Callable[[int, int], None],
+        on_drag_end: Callable[[int, int, bool], None] | None = None,
+    ) -> None:
+        """允许拖动窗口（左键按住移动）；松手时回调 (x, y, moved)。"""
+        self._draggable = True
+        self._on_drag = on_drag
+        self._on_drag_end = on_drag_end
+
+    def disable_drag(self) -> None:
+        self._draggable = False
+        if self._dragging:
+            self._dragging = False
+            win32.release_capture()
+        self._on_drag = None
+        self._on_drag_end = None
 
     def set_click_through(self, enabled: bool) -> None:
         self._click_through = enabled
