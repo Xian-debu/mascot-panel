@@ -66,6 +66,13 @@ def _keys(msg: Message) -> tuple[tuple[str, str, int], tuple[str, str, int] | No
     return content, ident
 
 
+def filter_cleared(messages: list[Message], cleared: set[str]) -> list[Message]:
+    """去掉用户已经 clear-history 过的消息（按 msg_id）；没有 id 的保留。"""
+    if not cleared:
+        return list(messages)
+    return [m for m in messages if not m.msg_id or m.msg_id not in cleared]
+
+
 def merge_history(*groups: list[Message], limit: int = 50) -> list[Message]:
     """按时间排序合并多份记录，按内容/id 去重，只留最后 limit 条。
 

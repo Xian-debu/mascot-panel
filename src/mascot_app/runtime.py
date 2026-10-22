@@ -24,7 +24,7 @@ from mascot_app import boot
 from mascot_core.config import Settings, load_settings, merge_hot
 from mascot_core.contract import ChatProvider, Message, SendCancelled
 from mascot_core.geometry import Rect, Screen, angle_for_time, follow_rect, orbit_layout
-from mascot_core.history import dump_history, merge_history, parse_history
+from mascot_core.history import dump_history, filter_cleared, merge_history, parse_history
 from mascot_core.state import (
     CLEAR_DEGRADED,
     HIDE_BALL,
@@ -76,6 +76,27 @@ def _write_runtime(data: dict[str, Any]) -> None:
         tmp.replace(path)
     except OSError as exc:
         log.warning("flags: 写入失败 %s: %s", path, exc)
+
+
+CLEARED_IDS_KEY = "cleared_history_ids"
+MAX_CLEARED_IDS = 200
+
+
+def load_cleared_ids() -> set[str]:
+    """用户清空过的消息 id：后端 history 还回来的旧消息按它过滤掉。"""
+    value = _read_runtime().get(CLEARED_IDS_KEY)
+    if not isinstance(value, list):
+        return set()
+    return {str(item) for item in value if isinstance(item, str) and item}
+
+
+def save_cleared_ids(ids: set[str]) -> None:
+    raw = _read_runtime()
+    if ids:
+        raw[CLEARED_IDS_KEY] = sorted(ids)[-MAX_CLEARED_IDS:]
+    else:
+        raw.pop(CLEARED_IDS_KEY, None)
+    _write_runtime(raw)
 
 
 def load_flags() -> dict[str, bool]:
@@ -294,6 +315,7 @@ class Runtime:
         self._paused = bool(flags.get("paused", False))
         # 待机球位置：用户拖过就记住（宠物不在时也不回角落）
         self._ball_pos: tuple[int, int] | None = load_ball_pos()
+        self._cleared_ids: set[str] = load_cleared_ids()
         # 免打扰：不自动弹出面板（仍跟随、仍可手动打开）；跨重启记住
         self._dnd = bool(flags.get("dnd", False))
         self._commands: list[str] = []
@@ -383,6 +405,8 @@ class Runtime:
         except Exception as exc:  # provider 是外部世界，绝不假设它守规矩
             self._provider_detail = str(exc)
             return
+        # 用户 clear-history 过的消息：后端 history 还会还回来，按 id 过滤
+        history = filter_cleared(history, self._cleared_ids)
         with self._lock:
             local = list(self._messages)
             self._messages = merge_history(history, local, limit=self.settings.history_limit)
@@ -400,9 +424,17 @@ class Runtime:
         self._write_state()
 
     def clear_history(self) -> None:
-        """清空面板里的对话（落盘文件一起清），下次启动不会再出现。"""
+        """清空面板里的对话（落盘文件一起清），下次启动不会再出现。
+
+        后端 history 是另一回事：它会把旧消息再还回来。这里记下被清消息的 id，
+        `_load_history` 合并前按 id 过滤，避免「清完重启又复活」。
+        """
         with self._lock:
+            cleared = {m.msg_id for m in self._messages if m.msg_id}
             self._messages = []
+        if cleared:
+            self._cleared_ids |= cleared
+            save_cleared_ids(self._cleared_ids)
         save_local_history([])
         self._write_state()
 

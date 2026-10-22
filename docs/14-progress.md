@@ -1,6 +1,6 @@
 # 进度报告（自动维护，供明早阅读）
 
-## 明早先读：2026-10-22 夜间交付总结（更新至 M21）
+## 明早先读：2026-10-22 夜间交付总结（更新至 M22）
 
 **做完了什么**：按 docs/10-plan.md 推进 M0→M13，产品仓库 /root/mascot
 （骨架 → 纯逻辑层 → CLI/provider → CI/进度 → 部署 → M1 平台 spike → M2 运行时 → M3 渲染 →
@@ -8,8 +8,8 @@ M4 面板与聊天 → M5 打包交付 → M6a/b/c 视觉对齐（像素时钟�
 M8 冷启动 → M9 免打扰与多屏定位 → M10 接上旧聊天后端 → M11 流式增量与停止生成 →
 M12 配置写回与开关持久化 → M13 待机形态 → M14 待机球像素时钟化/可拖动/记忆位置 →
 M15 聊天记录跨重启保留与清空 → M16 待机球右键菜单/边缘吸附/回到右下角 →
-M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真回滚 → M19 配置热重载 → M20 历史条数可配置 → M21 health 独立短超时）。
-管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023、M18 的 SG-0024、M19 的 SG-0025、M20 的 SG-0026、M21 的 SG-0027 见当天提交）。
+M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真回滚 → M19 配置热重载 → M20 历史条数可配置 → M21 health 独立短超时 → M22 clear-history 对后端 history 也生效）。
+管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023、M18 的 SG-0024、M19 的 SG-0025、M20 的 SG-0026、M21 的 SG-0027、M22 的 SG-0028 见当天提交）。
 
 **现在能做什么**（Windows 上已装好）：
 ```
@@ -26,7 +26,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 **验证过的硬事实**：
 - Linux：ruff 0 / pyright 0 / pytest 全绿；Windows：全量回归通过；M10 验收 9/9、M11 验收 15/15、
   M12 验收 16/16、M13 验收 10/10、M14 验收 9/9、M15 验收 14/14、M16 验收 7/7、
-  M17 验收 12/12、M18 验收 15/15、M19 验收 17/17、M20 验收 16/16、M21 验收 15/15 PASS。
+  M17 验收 12/12、M18 验收 15/15、M19 验收 17/17、M20 验收 16/16、M21 验收 15/15、M22 验收 14/14 PASS。
 - 真机跟随 TX-Pet 窗口（961,459 / 1616,272，随窗口移动）、面板与环绕球同进程共存、ctl 全动作可用、
   托盘菜单与双击互切可用、安装/卸载/回滚/双跑/自启逐个跑过（evidence/m5-*、m6*、m7-*、m8-*、m9 验收输出）。
 - 冷启动 **进程创建→面板可见 0.70 s**（安装版 0.71–0.87 s），此前 4.34 s；DoD ≤2 s 已达成（docs/24）。
@@ -46,7 +46,6 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 
 **已知缺口**：未签名（SmartScreen 可能提示）、无自动更新、
 面板立绘仍引用旧项目资源（未迁入本仓库）、旧后端未用真实 API Key 实测、
-清空历史仅限本地、
 待机球吸附只在松手时生效（无拖动中橡皮筋、无双击复位）。
 
 **仓库位置**：
@@ -543,3 +542,13 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
   `ctl stop --provider-url` 会 argparse 失败。细节见 `docs/37-m21-health-timeout.md`。
 - 遗留：`health_timeout_s` 是冷字段（改完要重启）；超时是 socket 级，不分 connect/read。
 - 交付：build-win.sh + install-win.sh 跑完，安装版 doctor/versions 正常。
+
+### M22 clear-history 对后端 history 也生效（2026-10-22 夜）
+
+- 痛点：M15 的 ctl clear-history 只清本地（history.json + 内存），后端 history 还在，重启后 _load_history() 又把旧消息合并回来——已知缺口「清空历史仅限本地」。
+- mascot_core/history.py 新增纯函数 filter_cleared(messages, cleared)（按 id 过滤，无 id 消息不动）；mascot_app/runtime.py 新增 load_cleared_ids()/save_cleared_ids()（落 runtime.json 的 cleared_history_ids，上限 200 条）。
+- runtime.py：__init__ 载入集合；_load_history() 从后端取到 history 后先过滤再 merge；clear_history() 把被清消息的 id 并入集合并落盘。集合只增不减；不清远端数据（那是用户对话）。
+- 验收 scripts/verify_m22.py 14/14 PASS：假 legacy 后端返回两条旧消息 → 读到 → clear-history → 重启后同一后端仍返回这两条但面板仍空、后端新增第 3 条只显示新的；回归 M13–M21 全 exit 0。
+- 坑：只清本地等于没清；按内容指纹过滤会误伤重复发言，必须用 id；无 id 消息不能进集合。
+- 遗留：远端仍留旧对话（换设备/删 runtime.json 会再现）；cleared_history_ids 上限 200 条、按字典序截断（非时间序）、无过期。
+- 交付：docs/38-m22-clear-history.md；build-win.sh + install-win.sh 已跑。

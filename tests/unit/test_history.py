@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 from mascot_core.contract import Message
-from mascot_core.history import dump_history, merge_history, parse_history
+from mascot_core.history import dump_history, filter_cleared, merge_history, parse_history
 
 
 def _m(role: str, text: str, ts: float = 0.0, mid: str = "") -> Message:
@@ -81,3 +81,26 @@ def test_merge_sorts_by_ts_and_keeps_tail() -> None:
 
 def test_merge_of_nothing_is_empty() -> None:
     assert merge_history([], [], limit=10) == []
+
+
+def test_filter_cleared_drops_matching_ids() -> None:
+    msgs = [_m("user", "旧问题", 1.0, "legacy-1"), _m("assistant", "旧回答", 2.0, "legacy-2")]
+    out = filter_cleared(msgs, {"legacy-1", "legacy-2"})
+    assert out == []
+
+
+def test_filter_cleared_keeps_uncleared() -> None:
+    msgs = [_m("user", "旧", 1.0, "legacy-1"), _m("user", "新", 3.0, "legacy-3")]
+    out = filter_cleared(msgs, {"legacy-1"})
+    assert [m.text for m in out] == ["新"]
+
+
+def test_filter_cleared_without_set_is_copy() -> None:
+    msgs = [_m("user", "a", 1.0, "local-1")]
+    out = filter_cleared(msgs, set())
+    assert out == msgs and out is not msgs
+
+
+def test_filter_cleared_keeps_messages_without_id() -> None:
+    msgs = [_m("assistant", "无 id", 1.0, "")]
+    assert filter_cleared(msgs, {"legacy-1"}) == msgs
