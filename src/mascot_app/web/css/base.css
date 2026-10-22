@@ -7,7 +7,9 @@ html,body{margin:0;height:100%;background:transparent;overflow:hidden;
   box-shadow:0 12px 32px rgba(0,0,0,.55);overflow:hidden;}
 
 .bar{display:flex;align-items:center;gap:var(--s2);padding:10px var(--s3);
-  border-bottom:1px solid var(--border);}
+  border-bottom:1px solid var(--border);cursor:grab;}
+.bar:active{cursor:grabbing;}
+.bar .avatar,.bar button{cursor:pointer;}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);
   box-shadow:0 0 8px var(--accent);}
 .title{font-size:var(--fs-13);font-weight:700;letter-spacing:.3px;

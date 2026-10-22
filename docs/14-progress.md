@@ -1,6 +1,6 @@
 # 进度报告（自动维护，供明早阅读）
 
-## 明早先读：2026-10-22 夜间交付总结（更新至 M23）
+## 明早先读：2026-10-22 夜间交付总结（更新至 M24）
 
 **做完了什么**：按 docs/10-plan.md 推进 M0→M13，产品仓库 /root/mascot
 （骨架 → 纯逻辑层 → CLI/provider → CI/进度 → 部署 → M1 平台 spike → M2 运行时 → M3 渲染 →
@@ -8,8 +8,8 @@ M4 面板与聊天 → M5 打包交付 → M6a/b/c 视觉对齐（像素时钟�
 M8 冷启动 → M9 免打扰与多屏定位 → M10 接上旧聊天后端 → M11 流式增量与停止生成 →
 M12 配置写回与开关持久化 → M13 待机形态 → M14 待机球像素时钟化/可拖动/记忆位置 →
 M15 聊天记录跨重启保留与清空 → M16 待机球右键菜单/边缘吸附/回到右下角 →
-M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真回滚 → M19 配置热重载 → M20 历史条数可配置 → M21 health 独立短超时 → M22 clear-history 对后端 history 也生效 → M23 就地升级命令 update）。
-管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023、M18 的 SG-0024、M19 的 SG-0025、M20 的 SG-0026、M21 的 SG-0027、M22 的 SG-0028、M23 的 SG-0029 见当天提交）。
+M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真回滚 → M19 配置热重载 → M20 历史条数可配置 → M21 health 独立短超时 → M22 clear-history 对后端 history 也生效 → M23 就地升级命令 update → M24 面板可拖动与位置记忆）。
+管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023、M18 的 SG-0024、M19 的 SG-0025、M20 的 SG-0026、M21 的 SG-0027、M22 的 SG-0028、M23 的 SG-0029、M24 的 SG-0030 见当天提交）。
 
 **现在能做什么**（Windows 上已装好）：
 ```
@@ -27,7 +27,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 **验证过的硬事实**：
 - Linux：ruff 0 / pyright 0 / pytest 全绿；Windows：全量回归通过；M10 验收 9/9、M11 验收 15/15、
   M12 验收 16/16、M13 验收 10/10、M14 验收 9/9、M15 验收 14/14、M16 验收 7/7、
-  M17 验收 12/12、M18 验收 15/15、M19 验收 17/17、M20 验收 16/16、M21 验收 15/15、M22 验收 14/14、M23 验收 26/26 PASS。
+  M17 验收 12/12、M18 验收 15/15、M19 验收 17/17、M20 验收 16/16、M21 验收 15/15、M22 验收 14/14、M23 验收 26/26、M24 验收 10/10 PASS。
 - 真机跟随 TX-Pet 窗口（961,459 / 1616,272，随窗口移动）、面板与环绕球同进程共存、ctl 全动作可用、
   托盘菜单与双击互切可用、安装/卸载/回滚/双跑/自启逐个跑过（evidence/m5-*、m6*、m7-*、m8-*、m9 验收输出）。
 - 冷启动 **进程创建→面板可见 0.70 s**（安装版 0.71–0.87 s），此前 4.34 s；DoD ≤2 s 已达成（docs/24）。
@@ -46,8 +46,8 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
    注意：真旧后端需要 API Key，我今晚只用一个模拟旧后端的假服务验证过（scripts/verify_m10.py 9/9 PASS）。
 
 **已知缺口**：未签名（SmartScreen 可能提示）、无网络自动更新（M23 只支持本地目录/zip 升级）、
-面板立绘仍引用旧项目资源（未迁入本仓库）、旧后端未用真实 API Key 实测、
-待机球吸附只在松手时生效（无拖动中橡皮筋、无双击复位）。
+旧后端未用真实 API Key 实测、待机球吸附只在松手时生效（无拖动中橡皮筋、无双击复位）、
+面板拖动后是绝对钉住（不跟随宠物、换分辨率不按比例迁移）。
 
 **仓库位置**：
 - 产品：/root/mascot（git；README 有结构与命令）
@@ -564,3 +564,15 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 坑：Windows 的 subprocess text=True 用 GBK，中文报错让 json.loads 拿到空 stdout（验收要 encoding=utf-8）；不能先删再装（先装 .incoming 再 rename）；升级前必须停实例。
 - 遗留：仍无网络自动更新与签名校验；不支持 MSI；装完不自动拉起。
 - 交付：docs/39-m23-update.md；build-win.sh + install-win.sh 已跑。
+
+### M24 面板可拖动与位置记忆（2026-10-22 夜）
+
+- 痛点：面板位置全由程序决定（待机右下角 / 跟随偏移），用户拖不了；计划 P1「跟随框记住拖拽偏移」一直没做。
+- 前端：panel.html 标题栏加 `pywebview-drag-region`（pywebview 的拖拽区），base.css 给 .bar 加 grab/grabbing 光标；提示 tooltip「拖动可移动面板」。
+- runtime.py：接管 `window.move`（pywebview 6.2.1 的 WinForms move 有 bug，SetWindowPos 把 None 传给 int 参数会抛 ctypes.ArgumentError，拖动时窗口不动）→ `_move_panel_from_js()` 按 DPI 逻辑→物理换算后调 win32.move_window。
+- 位置记忆：runtime.json 新键 `panel_pos`（load_panel_pos/save_panel_pos）；_place_panel 先量真实窗口，发现位置与 _last_panel_rect 差 >2px 即视为用户拖动 → _adopt_panel_pos 记下来并停止跟随/贴角（钉住）；`_panel_dirty` + 稳定后写一次盘，避免拖动中每帧写 JSON。
+- 复位：托盘/待机球菜单「面板回到默认位置」（CMD_RESET_PANEL=1008）与 ctl reset-panel，清 panel_pos 后立即重摆。
+- 验收 scripts/verify_m24.py 10/10 PASS：面板可见、初始无 panel_pos、真实鼠标拖标题栏（2048,942 → 1488,612 一带）、panel_pos 落盘、1.5s 不被摆回、重启后位置恢复（±4px）、ctl reset-panel 回右下角（2560-488-24, 1600-634-24）、panel_pos 清掉、两次退出 0；回归 M13–M16 全 exit 0；pytest 170 passed / ruff 0 / pyright 0。
+- 坑：只加拖拽区会看到「拖不动 + 日志里 SetWindowPos ctypes 报错」，必须接管 window.move；拖动中写盘会拖慢拖动。
+- 遗留：钉住是绝对坐标（不跟随宠物、换分辨率按 clamped 处理不按比例迁移）；无相对偏移记忆；无双击标题栏还原。
+- 交付：docs/40-m24-panel-drag.md、evidence/m24-panel-moved.png；build-win.sh + install-win.sh 已跑，安装版 mascot.exe 8018798 字节（22:07），current.txt=0.1.0，安装版 doctor ok（provider 项 false 属预期，auto 后端未起）、versions 正常。

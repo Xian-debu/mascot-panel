@@ -132,6 +132,36 @@ def save_ball_pos(pos: tuple[int, int] | None) -> None:
     _write_runtime(raw)
 
 
+def _load_pos(key: str) -> tuple[int, int] | None:
+    value = _read_runtime().get(key)
+    if (
+        isinstance(value, list)
+        and len(value) == 2
+        and all(isinstance(v, int) for v in value)
+    ):
+        return int(value[0]), int(value[1])
+    return None
+
+
+def _save_pos(key: str, pos: tuple[int, int] | None) -> None:
+    raw = _read_runtime()
+    if pos is None:
+        raw.pop(key, None)
+    else:
+        raw[key] = [int(pos[0]), int(pos[1])]
+    _write_runtime(raw)
+
+
+def load_panel_pos() -> tuple[int, int] | None:
+    """用户自己拖到的面板位置；有值就不再自动跟随/贴角。"""
+    return _load_pos("panel_pos")
+
+
+def save_panel_pos(pos: tuple[int, int] | None) -> None:
+    """记住/清除面板位置；None 表示回到默认（待机右下角 / 跟随宠物）。"""
+    _save_pos("panel_pos", pos)
+
+
 def save_flags(*, dnd: bool, paused: bool) -> None:
     """写回开关，保留同一文件里的其它键（如 ball_pos）。"""
     raw = _read_runtime()
@@ -243,6 +273,7 @@ CMD_AUTOSTART = 1004
 CMD_QUIT = 1005
 CMD_DND = 1006
 CMD_RESET_BALL = 1007
+CMD_RESET_PANEL = 1008
 
 _STATE_LABEL = {
     "idle": "待机",
@@ -315,6 +346,8 @@ class Runtime:
         self._paused = bool(flags.get("paused", False))
         # 待机球位置：用户拖过就记住（宠物不在时也不回角落）
         self._ball_pos: tuple[int, int] | None = load_ball_pos()
+        self._panel_pos: tuple[int, int] | None = load_panel_pos()
+        self._panel_dirty = False
         self._cleared_ids: set[str] = load_cleared_ids()
         # 免打扰：不自动弹出面板（仍跟随、仍可手动打开）；跨重启记住
         self._dnd = bool(flags.get("dnd", False))
@@ -623,6 +656,8 @@ class Runtime:
             self.post(Event.CLICK_CLOCK)
         elif cmd == "to_panel":
             self.post(Event.CLICK_BALL)
+        elif cmd == "reset_panel":
+            self._reset_panel_pos()
         elif cmd == "pause":
             if not self._paused:
                 self.command("toggle_pause")
@@ -736,22 +771,52 @@ class Runtime:
             self._ball.move(x, y)
         save_ball_pos((x, y))
 
+    def _move_panel_from_js(self, logical_x: float, logical_y: float) -> None:
+        """接住 pywebview 的拖动回调（window.move 被我们换掉了，绕开它的 bug）。"""
+        from mascot_win import win32
+
+        hwnd = self._panel_hwnd or self._ensure_panel_hwnd()
+        if not hwnd:
+            return
+        scale = win32.window_dpi(hwnd) / 96.0
+        win32.move_window(
+            hwnd, int(round(logical_x * scale)), int(round(logical_y * scale))
+        )
+
     def _place_panel(self, *, force: bool = False) -> None:
         from mascot_win import win32
 
         if not self._panel_hwnd:
             return
         width, height = self.settings.panel_size
+        # 先量真实窗口：WebView 的物理尺寸会被 DPI 放大（settings 是逻辑尺寸），
+        # 直接用逻辑尺寸锚定会溢出屏幕右下角；顺带用它发现“用户自己拖过面板”（M24）。
+        try:
+            px, py, real_w, real_h = win32.get_window_rect(self._panel_hwnd)
+        except Exception:
+            real_w = real_h = 0
+        if real_w > 0 and real_h > 0:
+            width, height = real_w, real_h
+        if real_w > 0 and self._last_panel_rect is not None:
+            last = self._last_panel_rect
+            if abs(px - last.x) > 2 or abs(py - last.y) > 2:
+                # 位置不是我们放的：用户拖了标题栏（.pywebview-drag-region）
+                self._adopt_panel_pos((px, py), (width, height))
+                return
+        if self._panel_dirty and self._panel_pos is not None:
+            # 拖完稳定了再落盘：拖动过程中每帧写盘太吵
+            save_panel_pos(self._panel_pos)
+            self._panel_dirty = False
+        if self._panel_pos is not None:
+            # 用户钉住的位置：只要还落在某块屏的工作区里就尊重它
+            x, y = self._clamp_panel((width, height), self._panel_pos)
+            rect = Rect(x, y, width, height)
+            if force or rect != self._last_panel_rect:
+                win32.move_window_below(self._panel_hwnd, rect.x, rect.y)
+                self._last_panel_rect = rect
+            return
         if self._pet is None:
-            # 待机面板：钉在右下角（宠物没开也要能用）。
-            # 注意 WebView 窗口的物理尺寸会被 DPI 放大（settings 是逻辑尺寸），
-            # 直接用逻辑尺寸锚定会溢出屏幕右下角，所以优先量真实窗口。
-            try:
-                _px, _py, real_w, real_h = win32.get_window_rect(self._panel_hwnd)
-            except Exception:
-                real_w = real_h = 0
-            if real_w > 0 and real_h > 0:
-                width, height = real_w, real_h
+            # 待机面板：钉在右下角（宠物没开也要能用）
             x, y = self._bottom_right((width, height))
             rect = Rect(x, y, width, height)
             if force or rect != self._last_panel_rect:
@@ -771,6 +836,34 @@ class Runtime:
         if force or rect != self._last_panel_rect:
             win32.move_window_below(self._panel_hwnd, rect.x, rect.y)
             self._last_panel_rect = rect
+
+    def _adopt_panel_pos(self, pos: tuple[int, int], size: tuple[int, int]) -> None:
+        """把用户拖出来的位置记下来（落盘延到拖动停下），并停止自动跟随/贴角。"""
+        if self._panel_pos != pos:
+            if not self._panel_dirty:
+                log.info("panel_moved", extra={"detail": f"{pos[0]},{pos[1]}"})
+            self._panel_pos = (int(pos[0]), int(pos[1]))
+            self._panel_dirty = True
+        width, height = size
+        self._last_panel_rect = Rect(pos[0], pos[1], width, height)
+
+    def _clamp_panel(self, size: tuple[int, int], pos: tuple[int, int]) -> tuple[int, int]:
+        """面板位置夹进它所在显示器的工作区，避免拖到屏幕外找不回来。"""
+        from mascot_win import win32
+
+        width, height = size
+        wx, wy, ww, wh = win32.work_area(pos[0] + width // 2, pos[1] + height // 2)
+        x = min(max(wx, pos[0]), max(wx, wx + ww - width))
+        y = min(max(wy, pos[1]), max(wy, wy + wh - height))
+        return x, y
+
+    def _reset_panel_pos(self) -> None:
+        """取消拖动记忆：回到默认位置（待机右下角 / 跟随宠物）。"""
+        self._panel_pos = None
+        save_panel_pos(None)
+        self._last_panel_rect = None
+        self._place_panel(force=True)
+        log.info("panel_reset")
 
     # ---- 帧 ---------------------------------------------------------------
 
@@ -936,6 +1029,7 @@ class Runtime:
             (CMD_AUTOSTART, "开机自启", _autostart_enabled()),
             (0, "", False),
             (CMD_RESET_BALL, "小球回到右下角", False),
+            (CMD_RESET_PANEL, "面板回到默认位置", False),
             (CMD_QUIT, "退出", False),
         ]
 
@@ -954,6 +1048,8 @@ class Runtime:
             self._ball_pos = None
             save_ball_pos(None)
             self._render_idle_ball()
+        elif cmd == CMD_RESET_PANEL:
+            self._reset_panel_pos()
         elif cmd == CMD_QUIT:
             self.command("quit")
 
@@ -1087,6 +1183,10 @@ class Runtime:
             hidden=True,
             js_api=JsApi(self),
         )
+        # pywebview 6.2.1 的 WinForms move() 有 bug：SetWindowPos 把 None 传给 int 参数
+        # 会抛 ctypes.ArgumentError（实测拖动时 js_bridge_call 报错、窗口不动）。
+        # 拖动回调是我们自己的窗口，直接接管：JS 给逻辑像素，这里换算成物理像素再移。
+        self._panel.move = self._move_panel_from_js  # type: ignore[method-assign]
 
         threading.Thread(target=self._worker, name="mascot-runtime", daemon=True).start()
         threading.Thread(target=self._history_loop, name="mascot-history", daemon=True).start()

@@ -275,6 +275,12 @@ def cmd_ctl(args: argparse.Namespace) -> int:
         if not _send_control("clear_history"):
             return _fail("IPC_FAILED", "控制文件写入失败", EXIT_FAIL)
         return _emit({"ok": True, "data": {"sent": "clear_history", "pid": pid}}, EXIT_OK)
+    if args.action == "reset-panel":
+        if pid is None:
+            return _fail("NOT_RUNNING", "没有运行中的实例", EXIT_ENV)
+        if not _send_control("reset_panel"):
+            return _fail("IPC_FAILED", "控制文件写入失败", EXIT_FAIL)
+        return _emit({"ok": True, "data": {"sent": "reset_panel", "pid": pid}}, EXIT_OK)
     if args.action == "cancel-send":
         if pid is None:
             return _fail("NOT_RUNNING", "没有运行中的实例", EXIT_ENV)
@@ -549,7 +555,7 @@ def build_parser() -> argparse.ArgumentParser:
         "action",
         choices=[
             "status", "stop", "to-ball", "to-panel", "send", "cancel-send",
-            "clear-history", "pause", "resume", "dnd",
+            "clear-history", "pause", "resume", "dnd", "reset-panel",
         ],
     )
     c.add_argument("--text", default="", help="send 动作要发送的文本")

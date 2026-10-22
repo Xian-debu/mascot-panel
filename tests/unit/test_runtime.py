@@ -114,6 +114,7 @@ def test_tray_menu_has_expected_items() -> None:
         "免打扰",
         "开机自启",
         "小球回到右下角",
+        "面板回到默认位置",
         "退出",
     ]
     assert sum(1 for _id, label, _c in menu if not label) == 2  # 两条分隔线
@@ -125,6 +126,30 @@ def test_reset_ball_clears_saved_position() -> None:
 
     rt._on_tray_command(CMD_RESET_BALL)  # noqa: SLF001
     assert rt._ball_pos is None  # noqa: SLF001
+
+
+def test_reset_panel_clears_saved_position() -> None:
+    rt = make_runtime()
+    from mascot_app.runtime import CMD_RESET_PANEL, load_panel_pos, save_panel_pos
+
+    rt._panel_pos = (10, 20)  # noqa: SLF001
+    save_panel_pos((10, 20))
+    rt._on_tray_command(CMD_RESET_PANEL)  # noqa: SLF001
+    assert rt._panel_pos is None  # noqa: SLF001
+    assert load_panel_pos() is None
+
+
+def test_panel_pos_roundtrip_and_noop_for_bad_data() -> None:
+    from mascot_app.runtime import _write_runtime, load_panel_pos, save_panel_pos
+
+    assert load_panel_pos() is None
+    save_panel_pos((321, 654))
+    assert load_panel_pos() == (321, 654)
+    # 坏数据当没有，绝不因此启动失败
+    _write_runtime({"panel_pos": [1, "x"]})
+    assert load_panel_pos() is None
+    save_panel_pos(None)
+    assert load_panel_pos() is None
 
 
 def test_toggle_pause_updates_snapshot_and_tip() -> None:
