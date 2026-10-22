@@ -1,42 +1,47 @@
 # 进度报告（自动维护，供明早阅读）
 
-## 明早先读：2026-10-22 夜间交付总结
+## 明早先读：2026-10-22 夜间交付总结（更新至 M9）
 
-**做完了什么**：按 docs/10-plan.md 的 M0→M5 全部推进完毕，产品仓库 /root/mascot
-（提交轨迹：仓库骨架 → 纯逻辑层 → CLI/provider → CI/进度 → M0.5 部署 → M1 平台 spike →
-M2 运行时 → M3 渲染 → M4 面板与聊天 → M5 打包交付）。管理仓库 /root/mascot-admin
-补齐 SG-0001…SG-0009 自授权清单。
+**做完了什么**：按 docs/10-plan.md 推进 M0→M9，产品仓库 /root/mascot
+（骨架 → 纯逻辑层 → CLI/provider → CI/进度 → 部署 → M1 平台 spike → M2 运行时 → M3 渲染 →
+M4 面板与聊天 → M5 打包交付 → M6a/b/c 视觉对齐（像素时钟球/彗尾/品牌位）→ M7 托盘 →
+M8 冷启动 → M9 免打扰与多屏定位）。管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0015 自授权清单。
 
-**现在能做什么**（Windows 上已装好；路径用正斜杠展示，资源管理器里同样可点开）：
+**现在能做什么**（Windows 上已装好）：
 ```
 C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe            # 双击/无参数 = GUI
 C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe doctor     # 体检
-C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe ctl status # 看状态
+C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe ctl status # 看状态（含 boot 分段、dnd、paused）
+C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe ctl dnd on # 免打扰：不自动弹面板
 C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe ctl stop   # 退出
 C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、起旧版
 ```
-注意：**开机自启当前是关闭的**（安装时没加 --autostart），要开：`mascot.exe autostart on`。
+右击托盘图标有：显示面板 / 收进小球 / 暂停跟随 / 免打扰 / 开机自启 / 退出；双击托盘=面板与小球互切。
+注意：**开机自启当前是关闭的**，要开：`mascot.exe autostart on`（或托盘勾选）。
 
-**验证过的硬事实**（细节见各里程碑小节与 docs/19-m5-delivery.md）：
-- Linux：ruff 0 / pyright 0 / pytest 68 passed；Windows：同套测试 68 passed（1 skip）。
-- 真机：跟随真实 TX-Pet 窗口（1616,272 180×180）、面板/环绕球同进程共存、ctl 全动作可用。
-- 打包：onedir 单 exe，双击=GUI（无控制台闪窗），带参数=CLI；冻结态面板资源正常。
-- 安装/卸载/回滚/双跑/自启 全部逐个跑过并留了截图（evidence/m5-*.png、m4-*.png、m3-*.png）。
+**验证过的硬事实**：
+- Linux：ruff 0 / pyright 0 / pytest 87 passed；Windows：93 passed（1 skip）。
+- 真机跟随 TX-Pet 窗口（961,459 / 1616,272，随窗口移动）、面板与环绕球同进程共存、ctl 全动作可用、
+  托盘菜单与双击互切可用、安装/卸载/回滚/双跑/自启逐个跑过（evidence/m5-*、m6*、m7-*、m8-*、m9 验收输出）。
+- 冷启动 **进程创建→面板可见 0.70 s**（安装版 0.71–0.87 s），此前 4.34 s；DoD ≤2 s 已达成（docs/24）。
+- 打包：onedir 单 exe，双击=GUI（无控制台闪窗），带参数=CLI；冻结态资源正常。
 
-**需要你拍板/知情的 3 件事**：
-1. **旧目录我加了一个文件** E:/TX-Pet/FROZEN.md（只新增、未改未删）。它来自 docs/10 §10 的要求，
-   但和 docs/13 §4“不动旧目录”冲突，已按规则写进 SG-0008；不认可直接删掉即可。
-2. **冷启动 4.34 s**，没达到 DoD 的 ≤2 s（pythonnet/clr + pywebview 初始化成本）。不影响可用性，
-   优化方案列在 docs/19-m5-delivery.md §8，等你决定要不要为它花时间。
-3. **功能三档**：docs/12 的“基线包/提质包/氛围包”还等你选（当时问的三个问题：托盘图标要不要、
-   氛围层要不要、聊天框要不要做流式）。M5 之后按你的选择继续。
+**需要你拍板/知情的 4 件事**：
+1. **旧目录我加了一个文件** E:/TX-Pet/FROZEN.md（只新增、未改未删）。与 docs/13 §4“不动旧目录”冲突，
+   已写进 SG-0008；不认可直接删掉即可。
+2. **冷启动**已从 4.34 s 优化到 0.70 s（M8）。原“要不要为它花时间”的问题自动解决。
+3. **功能三档**（docs/12）：基线包能力已全部落地（阅读/操作分离、消息合并折叠、草稿、IME 安全、
+   代码块复制、托盘、自启、状态灯、免打扰）。只剩“流式输出”需要后端配合，属于下一阶段。
+4. **聊天后端仍是空档**：面板契约是 /api/pet/{health,history,send}，目前只有 scripts/dev-chat-backend.py
+   假后端；旧 deepseek-chat-rebuild 说另一套 /api/pet/{news,ask,status,trigger}（SSE），两套没接通。
+   下一步计划写一个 legacy 适配 provider（见 docs/26），接上旧后端就能真聊。
 
 **已知缺口**：未签名（SmartScreen 可能提示）、无自动更新、旧版本目录不自动回收、
-面板立绘仍引用旧项目资源（未迁入本仓库）、无流式输出、消息不落盘。
+面板立绘仍引用旧项目资源（未迁入本仓库）、无流式输出、消息不落盘、DND 与暂停不持久化。
 
 **仓库位置**：
-- 产品：/root/mascot（git，README 有结构与命令）
-- 管理：/root/mascot-admin（规划、调研、决策、自授权清单；authorization/self-grants.md 倒序读）
+- 产品：/root/mascot（git；README 有结构与命令）
+- 管理：/root/mascot-admin（规划/调研/决策/自授权清单）
 - Windows 安装：%LOCALAPPDATA%/mascot/app/0.1.0/（current.txt 指针 + rollback.bat）
 - 旧版（冻结）：E:/TX-Pet/（可双跑、可回滚）
 
