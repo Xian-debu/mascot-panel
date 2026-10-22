@@ -1,0 +1,19 @@
+# python
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+# app runtime
+*.log
+*.pid
+.current
+evidence/*.tmp
+# os
+.DS_Store
+Thumbs.db

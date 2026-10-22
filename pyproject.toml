@@ -1,0 +1,49 @@
+[project]
+name = "mascot"
+version = "0.1.0"
+description = "天选姬桌宠跟随框 + 环绕球（重构版）"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pywebview>=6.2,<7",
+  "pillow>=12",
+  "pydantic-settings>=2.4",
+  "psutil>=6",
+]
+
+[project.scripts]
+mascot = "mascot_app.cli:main"
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "ruff>=0.6",
+  "pyright>=1.1.380",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mascot_core", "src/mascot_win", "src/mascot_render", "src/mascot_app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
+markers = ["platform: needs Windows desktop", "contract: provider contract"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.pyright]
+include = ["src"]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
