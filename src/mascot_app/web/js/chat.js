@@ -3,7 +3,7 @@
   const M = (window.Mascot = window.Mascot || {});
   const $ = function (id) { return document.getElementById(id); };
   const FOLD_LINES = 12;
-  let lastSignature = '';
+  let lastSignature = null;
 
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
@@ -102,7 +102,17 @@
     if (!list.length) {
       const empty = document.createElement('div');
       empty.className = 'empty';
-      empty.textContent = '还没有消息。\n说句话试试——离线时也会先显示在本地。';
+      const star = document.createElement('div');
+      star.className = 'empty-star';
+      const title = document.createElement('p');
+      title.className = 'empty-title';
+      title.textContent = '在的，说点什么吧';
+      const hint = document.createElement('span');
+      hint.className = 'empty-hint';
+      hint.textContent = 'Enter 发送 · Shift+Enter 换行';
+      empty.appendChild(star);
+      empty.appendChild(title);
+      empty.appendChild(hint);
       stream.appendChild(empty);
       return;
     }

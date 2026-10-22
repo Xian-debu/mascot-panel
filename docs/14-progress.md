@@ -274,3 +274,11 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 窗口尺寸变化走 `SetWindowPos` 而不是缩放位图（保像素边缘）。
 - 验证：Linux ruff 0 / pyright 0 / pytest 全绿；Windows 全套全绿；
   真机截图 `evidence/m6b-orbital.png`。细节见 `docs/21-m6b-orbit.md`。
+
+### M6c 面板视觉（2026-10-22 夜）
+
+- 标题栏品牌位：星座风 SVG 时钟头像（移植旧版 pet-clock，点一下收进小球）+ 青→紫渐变标题；
+  新增 `--violet` 品牌色（不参与状态语义）。
+- 空态：青紫渐变四角星 + 提示；修了 signature 初值撞车导致“首帧空态不渲染”的 bug。
+- 面板出现 160ms 上浮淡入，尊重 `prefers-reduced-motion`。
+- 真机截图 `evidence/m6c-panel.png`、`evidence/m6c-empty.png`；细节见 `docs/22-m6c-panel.md`。

@@ -2,7 +2,7 @@
 *{box-sizing:border-box;}
 html,body{margin:0;height:100%;background:transparent;overflow:hidden;
   font:var(--fs-12)/1.5 "Segoe UI","Microsoft YaHei UI",system-ui,sans-serif;color:var(--text);}
-.panel{position:relative;height:100%;display:flex;flex-direction:column;
+.panel{position:relative;animation:panel-in 160ms ease-out;height:100%;display:flex;flex-direction:column;
   background:var(--bg);border:1px solid var(--border);border-radius:var(--r-panel);
   box-shadow:0 12px 32px rgba(0,0,0,.55);overflow:hidden;}
 
@@ -10,7 +10,9 @@ html,body{margin:0;height:100%;background:transparent;overflow:hidden;
   border-bottom:1px solid var(--border);}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);
   box-shadow:0 0 8px var(--accent);}
-.title{font-size:var(--fs-13);font-weight:600;letter-spacing:.2px;}
+.title{font-size:var(--fs-13);font-weight:700;letter-spacing:.3px;
+  background:linear-gradient(90deg,var(--accent),var(--violet));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
 .grow{flex:1;}
 .chip{font-size:var(--fs-11);color:var(--text-dim);border:1px solid var(--border);
   border-radius:var(--r-card);padding:2px 8px;background:var(--card);}
@@ -32,3 +34,28 @@ button:hover{border-color:var(--accent);}
 button:active{transform:translateY(1px);}
 button.primary{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent);}
 button:disabled{opacity:.5;cursor:default;}
+
+/* 标题栏头像：星座风时钟（js/clock.js 注入 SVG），与标题渐变一起构成品牌位。 */
+.avatar{width:26px;height:26px;flex-shrink:0;border-radius:50%;cursor:pointer;
+  background:linear-gradient(135deg,var(--accent-soft),rgba(167,139,250,.18));
+  border:1px solid var(--violet-line);display:flex;align-items:center;justify-content:center;
+  transition:border-color var(--fast),box-shadow var(--fast);}
+.avatar:hover{border-color:var(--violet);box-shadow:0 0 10px rgba(167,139,250,.35);}
+.avatar .pet-clock-svg{width:24px;height:24px;display:block;}
+.pet-clock-svg .ring{fill:none;stroke:var(--border);stroke-width:1.5;}
+.pet-clock-svg .tick{fill:var(--text-muted);transition:fill var(--fast);}
+.pet-clock-svg .tick-hour{fill:var(--accent);}
+.pet-clock-svg .tick-min{fill:var(--text-dim);}
+.pet-clock-svg .tick-both{fill:var(--accent);}
+.pet-clock-svg .halo{fill:var(--accent);}
+.pet-clock-svg .hand-hour{stroke:var(--accent);stroke-width:3.5;stroke-linecap:round;}
+.pet-clock-svg .hand-min{stroke:var(--text);stroke-width:2;stroke-linecap:round;opacity:.8;}
+.pet-clock-svg .jewel{fill:var(--accent);}
+
+/* 面板出现：轻微上浮 + 淡入（重播靠 _place_panel 重新 show 时由浏览器重建窗口内容，
+   这里只保证首帧不“啪”地跳出来）。 */
+@keyframes panel-in{from{opacity:0;transform:translateY(4px) scale(.99);}to{opacity:1;transform:none;}}
+@media (prefers-reduced-motion: reduce){
+  .panel{animation:none;}
+  .dot.idle,.dot.working,.dot.awaiting{animation:none;}
+}

@@ -60,6 +60,8 @@ def test_panel_composes_all_modules() -> None:
         "M.renderMessages",
         "M.initComposer",
         "M.startPolling",
+        "M.mountClock",
+        ".empty-star",
         ".composer textarea",
         ".stream::-webkit-scrollbar",
     ):

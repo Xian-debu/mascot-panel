@@ -19,6 +19,7 @@ COLORS: dict[str, str] = {
     "amber": "#e3b341",
     "red": "#f85149",
     "green": "#3fb950",
+    "violet": "#a78bfa",
 }
 
 FONTS: dict[str, str] = {
@@ -62,6 +63,7 @@ ALPHA_VARS: dict[str, tuple[str, float]] = {
     "accent-line": ("accent", 0.50),
     "amber-soft": ("amber", 0.12),
     "amber-line": ("amber", 0.45),
+    "violet-line": ("violet", 0.35),
 }
 
 

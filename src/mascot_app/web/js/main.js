@@ -27,6 +27,7 @@
     M.store.messages = [];
 
     $('toBall').addEventListener('click', function () { M.api.toBall(); });
+    M.mountClock($('avatar'), function () { M.api.toBall(); });
 
     M.startPolling(apply);
   }
