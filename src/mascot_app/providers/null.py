@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 
 from mascot_core.contract import HealthState, Message, ProviderHealth
 
@@ -36,3 +37,7 @@ class NullProvider:
 
     def stop(self) -> None:
         return None
+
+    def send_stream(self, text: str, on_delta: Callable[[str], None]) -> Message:
+        """离线：没有增量可流，直接返回 send() 的结果。"""
+        return self.send(text)

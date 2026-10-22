@@ -7,3 +7,16 @@
 @keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
 @keyframes slow{0%,100%{opacity:.5}50%{opacity:1}}
 @keyframes breathe{0%,100%{opacity:.55}50%{opacity:.9}}
+
+/* 流式输出：光标闪烁 + "思考中"提示 + 发送键变"停止"。 */
+.msg.streaming .caret{display:inline-block;width:6px;height:13px;margin-left:2px;
+  background:var(--accent);vertical-align:-2px;animation:caret 1s steps(1) infinite;}
+.msg.streaming .thinking{color:var(--text-dim);font-size:var(--fs-12);}
+.msg.streaming .thinking::after{content:'';animation:dots 1.4s steps(4) infinite;}
+@keyframes caret{0%,49%{opacity:1}50%,100%{opacity:0}}
+@keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+button.primary.stopping{background:var(--amber-soft);border-color:var(--amber-line);color:var(--amber);}
+@media (prefers-reduced-motion:reduce){
+  .msg.streaming .caret{animation:none;}
+  .msg.streaming .thinking::after{content:'';}
+}

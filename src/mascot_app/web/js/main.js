@@ -8,7 +8,7 @@
   function apply(snap) {
     M.store.snapshot = snap;
     M.paintShell(snap);
-    M.renderMessages(snap.messages || []);
+    M.renderMessages(snap.messages || [], snap.streaming);
     setSending(!!snap.sending);
   }
 
@@ -22,9 +22,13 @@
       M.api.send(text);
       /* 本地先回显，避免等待后端时输入区“没反应” */
       const echo = M.store.messages.concat([{ role: 'user', text: text, ts: Date.now() / 1000, id: 'local-' + Date.now(), pending: true }]);
-      M.renderMessages(echo);
+      M.renderMessages(echo, { active: true, text: '' });
+    }, function () {
+      M.api.stop();
+      setSending(false);
     });
     M.store.messages = [];
+    M.store.streaming = { active: false, text: '' };
 
     $('toBall').addEventListener('click', function () { M.api.toBall(); });
     M.mountClock($('avatar'), function () { M.api.toBall(); });

@@ -6,6 +6,7 @@
     snapshot: null,
     messages: [],
     sending: false,
+    streaming: { active: false, text: '' },
     draftKey: 'mascot.draft',
     pollMs: 200,
   };
@@ -17,6 +18,7 @@
   M.api = {
     snapshot: function () { return M.hasBridge() ? window.pywebview.api.snapshot() : null; },
     send: function (text) { return M.hasBridge() ? window.pywebview.api.send(text) : Promise.resolve(null); },
+    stop: function () { return M.hasBridge() ? (window.pywebview.api.stop ? window.pywebview.api.stop() : Promise.resolve(null)) : Promise.resolve(null); },
     toBall: function () { return M.hasBridge() ? window.pywebview.api.to_ball() : Promise.resolve(null); },
     toPanel: function () { return M.hasBridge() ? window.pywebview.api.to_panel() : Promise.resolve(null); },
   };

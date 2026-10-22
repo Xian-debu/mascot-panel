@@ -1,11 +1,12 @@
 # 进度报告（自动维护，供明早阅读）
 
-## 明早先读：2026-10-22 夜间交付总结（更新至 M10）
+## 明早先读：2026-10-22 夜间交付总结（更新至 M11）
 
-**做完了什么**：按 docs/10-plan.md 推进 M0→M9，产品仓库 /root/mascot
+**做完了什么**：按 docs/10-plan.md 推进 M0→M11，产品仓库 /root/mascot
 （骨架 → 纯逻辑层 → CLI/provider → CI/进度 → 部署 → M1 平台 spike → M2 运行时 → M3 渲染 →
 M4 面板与聊天 → M5 打包交付 → M6a/b/c 视觉对齐（像素时钟球/彗尾/品牌位）→ M7 托盘 →
-M8 冷启动 → M9 免打扰与多屏定位 → M10 接上旧聊天后端）。管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0016 自授权清单。
+M8 冷启动 → M9 免打扰与多屏定位 → M10 接上旧聊天后端 → M11 流式增量与停止生成）。
+管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0017 自授权清单。
 
 **现在能做什么**（Windows 上已装好）：
 ```
@@ -20,7 +21,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 注意：**开机自启当前是关闭的**，要开：`mascot.exe autostart on`（或托盘勾选）。
 
 **验证过的硬事实**：
-- Linux：ruff 0 / pyright 0 / pytest 95 passed；Windows：93 passed（1 skip）；M10 验收 9/9 PASS。
+- Linux：ruff 0 / pyright 0 / pytest 98 passed；Windows：全量回归通过；M10 验收 9/9、M11 验收 15/15 PASS。
 - 真机跟随 TX-Pet 窗口（961,459 / 1616,272，随窗口移动）、面板与环绕球同进程共存、ctl 全动作可用、
   托盘菜单与双击互切可用、安装/卸载/回滚/双跑/自启逐个跑过（evidence/m5-*、m6*、m7-*、m8-*、m9 验收输出）。
 - 冷启动 **进程创建→面板可见 0.70 s**（安装版 0.71–0.87 s），此前 4.34 s；DoD ≤2 s 已达成（docs/24）。
@@ -31,7 +32,8 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
    已写进 SG-0008；不认可直接删掉即可。
 2. **冷启动**已从 4.34 s 优化到 0.70 s（M8）。原“要不要为它花时间”的问题自动解决。
 3. **功能三档**（docs/12）：基线包能力已全部落地（阅读/操作分离、消息合并折叠、草稿、IME 安全、
-   代码块复制、托盘、自启、状态灯、免打扰）。只剩“流式增量渲染”和“停止生成”未做。
+   代码块复制、托盘、自启、状态灯、免打扰、**流式增量渲染 + 停止生成**，M11 补齐）。
+   提质包/氛围包（docs/12）尚未开工，等你选。
 4. **聊天后端已接通旧契约**（M10）：`provider` 默认 `auto`——先探旧 deepseek-chat-rebuild 的
    /api/pet/{status,news,ask}（SSE），不通再探新契约 /api/pet/{health,history,send}。你把旧后端
    起在 127.0.0.1:8890，面板就能真聊（历史来自 /api/pet/news，回复由 SSE 分片拼接）。
@@ -335,3 +337,17 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
   `verify_m7.py` 12 项回归全过；无后端时降级文案为「legacy timed out」；截图
   `evidence/m10-chat.png`、`evidence/m10-degraded.png`。Linux ruff 0 / pyright 0 / pytest 95 passed。
 - 遗留：真旧后端未实测（需 API Key）、历史无真实时间戳、无流式增量渲染。细节见 `docs/26-m10-backend.md`。
+
+### M11 流式增量渲染与停止生成（2026-10-22 深夜）
+
+- 背景：M10 之后回复是「整段到达」，真后端一次要 10–60 秒，面板看起来像卡死。
+- `ChatProvider` 增加**可选** duck-typed `send_stream(text, on_delta)`；legacy 逐片回调，
+  wsl/null 退化整段，auto 必须转发（不转发则 auto 模式永远整段到达）。
+- 取消不打断线程：置 `_cancel`，下一次 `_on_delta` 抛 `SendCancelled`，已收部分落成
+  `partial-*` 消息保留；`ctl cancel-send` 与面板「停止」两条路径都补齐了 `_poll_control` 分支。
+- 修 SSE 分片空格 bug：`strip()` 吃掉词间空格（helloworld），改为只剥一个协议前导空格，
+  契约测试锁死 `"hello  world"`。
+- 验收：`scripts/verify_m11.py` 15 项全过（增量观察 78–98 次采样、取消保留 17–18/84 字）；
+  Windows 全量回归通过；Linux ruff 0 / pyright 0 / pytest 98 passed。
+  截图 `evidence/m11-streaming.png`、`evidence/m11-stopped.png`。细节见 `docs/27-m11-streaming.md`。
+- 遗留：增量不落盘（崩溃即丢）、取消是「停读」非「停写」、history 仍无真实时间戳。

@@ -240,6 +240,7 @@ def cmd_ctl(args: argparse.Namespace) -> int:
                     "pet": state.get("pet"),
                     "uptime_s": state.get("uptime_s"),
                     "sending": state.get("sending", False),
+                    "streaming": state.get("streaming", {"active": False, "text": ""}),
                     "messages": state.get("messages", []),
                     "checks": checks,
                 },
@@ -255,6 +256,12 @@ def cmd_ctl(args: argparse.Namespace) -> int:
         if not _send_control("send", text=text):
             return _fail("IPC_FAILED", "控制文件写入失败", EXIT_FAIL)
         return _emit({"ok": True, "data": {"sent": "send", "pid": pid}}, EXIT_OK)
+    if args.action == "cancel-send":
+        if pid is None:
+            return _fail("NOT_RUNNING", "没有运行中的实例", EXIT_ENV)
+        if not _send_control("cancel_send"):
+            return _fail("IPC_FAILED", "控制文件写入失败", EXIT_FAIL)
+        return _emit({"ok": True, "data": {"sent": "cancel_send", "pid": pid}}, EXIT_OK)
     if args.action in ("to-ball", "to-panel", "pause", "resume", "dnd"):
         if pid is None:
             return _fail("NOT_RUNNING", "没有运行中的实例", EXIT_ENV)
@@ -349,7 +356,7 @@ def build_parser() -> argparse.ArgumentParser:
     c = sub.add_parser("ctl", help="控制运行中的实例")
     c.add_argument(
         "action",
-        choices=["status", "stop", "to-ball", "to-panel", "send", "pause", "resume", "dnd"],
+        choices=["status", "stop", "to-ball", "to-panel", "send", "cancel-send", "pause", "resume", "dnd"],
     )
     c.add_argument("--text", default="", help="send 动作要发送的文本")
     c.add_argument("value", nargs="?", help="dnd 的 on/off")

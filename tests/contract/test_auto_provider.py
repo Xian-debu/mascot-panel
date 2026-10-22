@@ -96,3 +96,14 @@ def test_both_down_reports_both_details() -> None:
     health = provider.health()
     assert health.state is HealthState.DOWN
     assert health.detail and "legacy:" in health.detail
+
+
+def test_send_stream_delegates_to_active_backend(servers) -> None:
+    """auto 必须把流式能力转给选中的后端，否则面板只剩"整段一次性到达"。"""
+    provider = AutoProvider(servers["legacy"][1], timeout_s=2.0)
+    assert provider.health().state is HealthState.UP
+    pieces: list[str] = []
+    message = provider.send_stream("在吗", pieces.append)
+    assert message.text == "legacy:在吗"
+    assert pieces and "".join(pieces) == message.text
+

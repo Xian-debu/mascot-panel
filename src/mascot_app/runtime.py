@@ -22,7 +22,7 @@ from typing import Any
 
 from mascot_app import boot
 from mascot_core.config import Settings
-from mascot_core.contract import ChatProvider, Message
+from mascot_core.contract import ChatProvider, Message, SendCancelled
 from mascot_core.geometry import Rect, Screen, angle_for_time, follow_rect, orbit_layout
 from mascot_core.state import (
     CLEAR_DEGRADED,
@@ -118,6 +118,9 @@ class JsApi:
     def send(self, text: str) -> dict[str, Any]:
         return self._rt.send_text(text)
 
+    def stop(self) -> dict[str, Any]:
+        return {"ok": self._rt.cancel_send()}
+
 
 
 # 托盘菜单命令 id（只在进程内使用，不进协议）
@@ -178,6 +181,9 @@ class Runtime:
         self._messages: list[Message] = []
         self._sending = False
         self._send_queue: list[str] = []
+        self._stream_text = ""
+        self._stream_active = False
+        self._cancel = threading.Event()
         self._paused = False
         self._dnd = False  # 免打扰：不自动弹出面板（仍跟随、仍可手动打开）
         self._commands: list[str] = []
@@ -199,6 +205,7 @@ class Runtime:
                 "error": self._error,
                 "provider_detail": self._provider_detail,
                 "sending": self._sending,
+                "streaming": {"active": self._stream_active, "text": self._stream_text},
                 "paused": self._paused,
                 "dnd": self._dnd,
                 "autostart": _autostart_enabled(),
@@ -231,7 +238,22 @@ class Runtime:
             return {"ok": False, "reason": "EMPTY_TEXT"}
         with self._lock:
             self._send_queue.append(clean[:4000])
+            self._cancel.clear()
         return {"ok": True, "queued": True}
+
+    def cancel_send(self) -> bool:
+        """面板/ctl 的「停止」：置位取消标志，provider 下一次回调时抛 SendCancelled。"""
+        with self._lock:
+            active = self._stream_active
+            self._cancel.set()
+        return active
+
+    def _on_delta(self, piece: str) -> None:
+        """provider 每收到一个分片调一次。持锁追加，取消时抛 SendCancelled 中止读取。"""
+        with self._lock:
+            if self._cancel.is_set():
+                raise SendCancelled
+            self._stream_text += piece
 
     def _load_history(self) -> None:
         try:
@@ -251,13 +273,31 @@ class Runtime:
                     Message(role="user", text=text, ts=time.time(), msg_id=f"local-{len(self._messages)}")
                 )
                 self._sending = True
+                self._stream_text = ""
+                self._stream_active = True
+                self._cancel.clear()
             try:
-                reply = self.provider.send(text)
+                reply = self._send_streaming(text)
                 if reply.role == "assistant" and reply.text:
                     with self._lock:
                         self._messages.append(reply)
                 self._error = ""
                 self._provider_detail = ""
+            except SendCancelled:
+                # 用户点了停止：把已收到的部分文本落成一条消息，标注被截断
+                with self._lock:
+                    partial = self._stream_text.strip()
+                if partial:
+                    with self._lock:
+                        self._messages.append(
+                            Message(
+                                role="assistant",
+                                text=partial,
+                                ts=time.time(),
+                                msg_id=f"partial-{int(time.time() * 1000)}",
+                            )
+                        )
+                log.info("send 已取消")
             except Exception as exc:
                 self._error = str(exc)
                 self._provider_detail = str(exc)
@@ -265,6 +305,15 @@ class Runtime:
             finally:
                 with self._lock:
                     self._sending = False
+                    self._stream_active = False
+                    self._stream_text = ""
+
+    def _send_streaming(self, text: str) -> Message:
+        """有 send_stream 就用流式（面板能看到逐字增长），否则退回一次性 send。"""
+        stream = getattr(self.provider, "send_stream", None)
+        if callable(stream):
+            return stream(text, self._on_delta)  # type: ignore[no-any-return]
+        return self.provider.send(text)
 
     # ---- 副作用 -------------------------------------------------------------
 
@@ -345,6 +394,8 @@ class Runtime:
         if cmd == "send":
             with contextlib.suppress(ValueError, AttributeError):
                 self.send_text(str(json.loads(raw).get("text", "")))
+        elif cmd == "cancel_send":
+            self.cancel_send()
         elif cmd == "to_ball":
             self.post(Event.CLICK_CLOCK)
         elif cmd == "to_panel":

@@ -157,3 +157,70 @@ def test_dnd_toggle_hides_panel_and_skips_auto_show() -> None:
     rt._drain_commands()  # noqa: SLF001
     assert rt.snapshot()["dnd"] is False
     assert SHOW_PANEL  # 常量仍由状态机产生，跳过逻辑只在 _apply
+
+class StreamingProvider(FakeProvider):
+    """按分片交付的假 provider；可在指定分片后触发取消，验证部分文本落盘。"""
+
+    def __init__(self, pieces: list[str], snapshots: list[dict[str, object]] | None = None, cancel_after: int | None = None) -> None:
+        super().__init__()
+        self.pieces = pieces
+        self.snapshots = snapshots
+        self.cancel_after = cancel_after
+        self.rt: Runtime | None = None
+
+    def send_stream(self, text: str, on_delta: object) -> Message:
+        emit = on_delta
+        for i, piece in enumerate(self.pieces):
+            if i == self.cancel_after and self.rt is not None:
+                self.rt.cancel_send()
+            assert callable(emit)
+            emit(piece)
+            if self.snapshots is not None:
+                assert self.rt is not None
+                self.snapshots.append(self.rt.snapshot()["streaming"])
+        self.sent.append(text)
+        return Message(role="assistant", text="".join(self.pieces), ts=time.time(), msg_id="stream-1")
+
+
+def test_send_stream_exposes_partial_text() -> None:
+    seen: list[dict[str, object]] = []
+    provider = StreamingProvider(["你", "好", "呀"], snapshots=seen)
+    rt = make_runtime(provider)
+    provider.rt = rt
+    rt._load_history()
+
+    rt.send_text("打个招呼")
+    rt._drain_sends()  # noqa: SLF001
+
+    assert seen == [
+        {"active": True, "text": "你"},
+        {"active": True, "text": "你好"},
+        {"active": True, "text": "你好呀"},
+    ]
+    snap = rt.snapshot()
+    assert snap["streaming"] == {"active": False, "text": ""}
+    texts = [(m["role"], m["text"]) for m in snap["messages"]]
+    assert texts == [("assistant", "早上好"), ("user", "打个招呼"), ("assistant", "你好呀")]
+
+
+def test_cancel_keeps_partial_reply() -> None:
+    provider = StreamingProvider(["第一段", "不该出现"], cancel_after=1)
+    rt = make_runtime(provider)
+    provider.rt = rt
+
+    rt.send_text("长回答")
+    rt._drain_sends()  # noqa: SLF001
+
+    snap = rt.snapshot()
+    assert snap["sending"] is False
+    assert snap["streaming"]["active"] is False
+    texts = [m["text"] for m in snap["messages"]]
+    assert texts[-1] == "第一段"
+    assert "不该出现" not in "".join(texts)
+    assert snap["messages"][-1]["id"].startswith("partial-")
+
+
+def test_cancel_send_is_noop_when_idle() -> None:
+    rt = make_runtime()
+    assert rt.cancel_send() is False
+

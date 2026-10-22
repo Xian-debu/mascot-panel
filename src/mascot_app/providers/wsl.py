@@ -12,6 +12,7 @@ import json
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 
 from mascot_core.contract import HealthState, Message, ProviderHealth
 
@@ -77,3 +78,10 @@ class WslProvider:
 
     def stop(self) -> None:
         return None
+
+    def send_stream(self, text: str, on_delta: Callable[[str], None]) -> Message:
+        """新契约是一次性 JSON 回复：拿到后一次性交给 on_delta。"""
+        msg = self.send(text)
+        if msg.text:
+            on_delta(msg.text)
+        return msg

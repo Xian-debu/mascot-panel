@@ -11,7 +11,7 @@
     el.style.height = Math.min(el.scrollHeight, LINE * 4 + 14) + 'px';
   }
 
-  M.initComposer = function (onSend) {
+  M.initComposer = function (onSend, onStop) {
     const input = $('input');
     const send = $('send');
 
@@ -34,7 +34,13 @@
       submit();
     });
 
-    send.addEventListener('click', submit);
+    send.addEventListener('click', function () {
+      if (M.store.sending) {
+        if (onStop) onStop();
+        return;
+      }
+      submit();
+    });
 
     function submit() {
       const text = input.value.trim();
@@ -47,7 +53,9 @@
 
     return function setSending(flag) {
       M.store.sending = !!flag;
-      send.disabled = M.store.sending || !input.value.trim();
+      send.textContent = M.store.sending ? '停止' : '发送';
+      send.classList.toggle('stopping', M.store.sending);
+      send.disabled = !M.store.sending && !input.value.trim();
     };
   };
 })();

@@ -89,9 +89,10 @@
     return el;
   }
 
-  M.renderMessages = function (messages) {
+  M.renderMessages = function (messages, streaming) {
     const list = messages || [];
-    const signature = list.map(function (m) { return (m.id || '') + ':' + (m.text || '').length + ':' + (m.pending ? 1 : 0); }).join('|');
+    const live = streaming && streaming.active ? String(streaming.text || '') : '';
+    const signature = list.map(function (m) { return (m.id || '') + ':' + (m.text || '').length + ':' + (m.pending ? 1 : 0); }).join('|') + '#' + live.length;
     if (signature === lastSignature) return;
     lastSignature = signature;
 
@@ -99,7 +100,7 @@
     const atBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 40;
     stream.textContent = '';
 
-    if (!list.length) {
+    if (!list.length && !live) {
       const empty = document.createElement('div');
       empty.className = 'empty';
       const star = document.createElement('div');
@@ -132,6 +133,31 @@
       stream.appendChild(messageEl(msg, msg.role === prevRole));
       prevRole = msg.role;
     });
+
+    if (live) {
+      const el = document.createElement('article');
+      el.className = 'msg assistant streaming';
+      const body = document.createElement('div');
+      body.className = 'body';
+      body.appendChild(buildBody(live));
+      const caret = document.createElement('span');
+      caret.className = 'caret';
+      body.appendChild(caret);
+      el.appendChild(body);
+      stream.appendChild(el);
+    } else if (streaming && streaming.active) {
+      /* 已经发出、还没收到第一个分片：显示"思考中"占位 */
+      const el = document.createElement('article');
+      el.className = 'msg assistant streaming';
+      const body = document.createElement('div');
+      body.className = 'body';
+      const dots = document.createElement('span');
+      dots.className = 'thinking';
+      dots.textContent = '思考中';
+      body.appendChild(dots);
+      el.appendChild(body);
+      stream.appendChild(el);
+    }
 
     if (atBottom) stream.scrollTop = stream.scrollHeight;
   };

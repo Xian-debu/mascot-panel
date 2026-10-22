@@ -1,17 +1,16 @@
 """Legacy provider：对接旧 deepseek-chat-rebuild 的 /api/pet/* 契约。
 
-旧后端（/root/projects/deepseek-chat-rebuild）是给 ASUS 原生桌宠写的：
+旧后端是给 ASUS 原生桌宠写的：
 
-    GET  /api/pet/status             -> {"status":"ok", ...}            健康 + 会话统计
-    GET  /api/pet/news?session_id=   -> {"code":202000,"data":[news...]} 会话历史（新闻格式）
-    POST /api/pet/ask    {"message"} -> text/event-stream，data: 分片，末条 [SESSION:<id>]
+    GET  /api/pet/status            -> {"status":"ok","engine":"ready"|"missing"|"error",...}
+    GET  /api/pet/news?session_id=  -> {"code":202000,"data":[{id,title,description,...}]}
+    POST /api/pet/ask {"message"}   -> text/event-stream，data: 分片，末条 [SESSION:<id>]
 
-新面板的契约是 /api/pet/{health,history,send}（见 mascot_core.contract）。本适配层负责翻译：
+新面板的契约是 /api/pet/{health,history,send}。本适配层负责翻译：
+
 - news item 的 title 前缀 "主人:" / "天选姬:" 决定 role；description 是正文；
-- 流式 SSE 拼接成一条 assistant 消息（本版不做增量渲染，避免面板协议改动）；
+- SSE 分片既拼成完整消息（send），也支持边收边回调（send_stream -> 面板流式渲染）；
 - [SESSION:<id>] 存下来，下一轮 ask 带上，保持同一会话。
-
-这样用户把旧后端跑起来就能真聊，不必改旧项目一行代码。
 """
 
 from __future__ import annotations
@@ -21,6 +20,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from typing import Any
 
 from mascot_core.contract import HealthState, Message, ProviderHealth
@@ -41,9 +41,7 @@ class LegacyProvider:
     # ---- HTTP 基础 -------------------------------------------------------
 
     def _get(self, path: str) -> Any:
-        req = urllib.request.Request(
-            f"{self.base_url}{path}", headers={"Accept": "application/json"}
-        )
+        req = urllib.request.Request(f"{self.base_url}{path}", headers={"Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:  # noqa: S310 - 本机回环
             return json.loads(resp.read().decode("utf-8"))
 
@@ -73,7 +71,7 @@ class LegacyProvider:
             return ProviderHealth(
                 state=HealthState.DEGRADED,
                 latency_ms=ms,
-                detail=f"后端在线但引擎 {engine}（可能缺 API Key）",
+                detail="后端在线但引擎 " + engine + "（可能缺 API Key）",
                 reason_code="PROVIDER_ENGINE_DOWN",
             )
         return ProviderHealth(state=HealthState.UP, latency_ms=ms)
@@ -81,7 +79,7 @@ class LegacyProvider:
     def history(self, limit: int = 50) -> list[Message]:
         path = "/api/pet/news"
         if self._session_id:
-            path += f"?session_id={urllib.parse.quote(self._session_id)}"
+            path += "?session_id=" + urllib.parse.quote(self._session_id)
         try:
             raw = self._get(path)
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
@@ -102,19 +100,26 @@ class LegacyProvider:
                     role=role,
                     text=text,
                     ts=now - (len(items) - idx) * 0.001,
-                    msg_id=f"legacy-{item.get('id', idx)}",
+                    msg_id="legacy-" + str(item.get("id", idx)),
                 )
             )
         return out[-limit:]
 
     def send(self, text: str) -> Message:
-        """POST /api/pet/ask，把 SSE 分片拼成一条消息。"""
+        """一次性发送（不关心中间分片）。"""
+        return self.send_stream(text, lambda _piece: None)
+
+    def send_stream(self, text: str, on_delta: Callable[[str], None]) -> Message:
+        """POST /api/pet/ask，每收到一个 SSE 分片就回调 on_delta。
+
+        on_delta 抛 SendCancelled 时中断读取并上抛；已收到的分片由调用方保存。
+        """
         payload: dict[str, Any] = {"message": text}
         if self._session_id:
             payload["session_id"] = self._session_id
         req = urllib.request.Request(
             f"{self.base_url}/api/pet/ask",
-            data=json.dumps(payload).encode("utf-8"),
+            data=json.dumps(payload).encode(),
             headers={"Content-Type": "application/json", "Accept": "text/event-stream"},
             method="POST",
         )
@@ -122,18 +127,22 @@ class LegacyProvider:
         session_id = ""
         with urllib.request.urlopen(req, timeout=self.send_timeout_s) as resp:  # noqa: S310
             for raw_line in resp:
-                line = raw_line.decode("utf-8", errors="replace").strip()
-                if not line.startswith("data: "):
+                # 只去行尾换行：SSE 分片自己可能以空格开头/结尾，strip() 会把词粘在一起
+                line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
+                if not line.startswith("data:"):
                     continue
-                piece = line[6:]
+                piece = line[5:]
+                if piece.startswith(" "):
+                    piece = piece[1:]
                 if piece.startswith("[SESSION:"):
-                    session_id = piece[len("[SESSION:") :].rstrip("]")
+                    session_id = piece[len("[SESSION:") :].rstrip("]")  # noqa: E203
                     break
                 if piece.startswith("[ERROR]"):
                     raise RuntimeError(piece)
                 if piece == "[DONE]":
                     break
                 chunks.append(piece)
+                on_delta(piece)
         if session_id:
             self._session_id = session_id
         body = "".join(chunks).strip()

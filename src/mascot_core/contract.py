@@ -61,3 +61,14 @@ class ChatProvider(Protocol):
     def send(self, text: str) -> Message: ...
 
     def stop(self) -> None: ...
+
+    # 可选能力（duck typing，不在 Protocol 里强制）：
+    #
+    #   def send_stream(self, text: str, on_delta: Callable[[str], None]) -> Message: ...
+    #
+    # 实现者边收边调用 on_delta；回调抛 SendCancelled 时应当中止并让异常上抛。
+    # 调 run() 时用 getattr 探测，没有就退回一次性 send()。
+
+
+class SendCancelled(Exception):
+    """用户在流式输出中途点了「停止」。provider 抛它，运行时保留已收到的部分文本。"""

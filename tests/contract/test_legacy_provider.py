@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Iterator
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -107,3 +108,40 @@ def test_unreachable_returns_down() -> None:
 def test_history_empty_on_failure() -> None:
     provider = LegacyProvider("http://127.0.0.1:9", timeout_s=0.5)
     assert provider.history() == []
+
+
+@contextmanager
+def _space_server() -> Iterator[str]:
+    """SSE 分片以空格结尾/开头：strip() 式解析会把词粘在一起，这里锁住正确行为。"""
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_args: object) -> None:
+            return
+
+        def do_POST(self) -> None:  # noqa: N802
+            self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.end_headers()
+            for piece in ("hello ", " world"):
+                self.wfile.write(f"data: {piece}\n\n".encode())
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_stream_pieces_keep_their_spaces() -> None:
+    with _space_server() as url:
+        pieces: list[str] = []
+        provider = LegacyProvider(url)
+        reply = provider.send_stream("hi", pieces.append)
+    assert reply.text == "hello  world"
+    assert pieces == ["hello ", " world"]
+

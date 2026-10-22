@@ -12,6 +12,8 @@ history/send 都发给它，避免每条消息重新选路、也避免两套后�
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from mascot_app.providers.legacy import LegacyProvider
 from mascot_app.providers.wsl import WslProvider
 from mascot_core.contract import HealthState, Message, ProviderHealth
@@ -49,6 +51,13 @@ class AutoProvider:
         return self._active.history(limit=limit)
 
     def send(self, text: str) -> Message:
+        return self._active.send(text)
+
+    def send_stream(self, text: str, on_delta: Callable[[str], None]) -> Message:
+        """把流式能力转给当前选中的后端（legacy 是真流式，wsl 是单次交付）。"""
+        stream = getattr(self._active, "send_stream", None)
+        if callable(stream):
+            return stream(text, on_delta)  # type: ignore[no-any-return]
         return self._active.send(text)
 
     def stop(self) -> None:

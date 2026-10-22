@@ -9,6 +9,8 @@
   GET  /api/pet/status  -> {"status":"ok","engine":"ready",...}
   GET  /api/pet/news    -> {"code":202000,"data":[{id,title,description,ts}]}
   POST /api/pet/ask     -> text/event-stream，data: 分片 ... data: [SESSION:<id>]
+
+--chunk-delay 让分片之间停顿（默认 0），用于验证流式增量渲染与中途取消。
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ SEED: list[dict] = [
 ]
 
 
-def _handler_factory(state: dict) -> type[BaseHTTPRequestHandler]:
+def _handler_factory(state: dict, chunk_delay: float = 0.0) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_args: object) -> None:
             return
@@ -69,21 +71,28 @@ def _handler_factory(state: dict) -> type[BaseHTTPRequestHandler]:
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream; charset=utf-8")
             self.end_headers()
-            for piece in ("（假旧后端）收到 ", f"{len(text)} 个字：{text}"):
+            for piece in _chunks(reply, 6):
                 self.wfile.write(f"data: {piece}\n\n".encode())
+                self.wfile.flush()
+                if chunk_delay > 0:
+                    time.sleep(chunk_delay)
             self.wfile.write(b"data: [SESSION:sess-dev]\n\n")
             self.wfile.flush()
 
     return Handler
 
 
-def make_server(port: int = 0) -> ThreadingHTTPServer:
+def _chunks(text: str, size: int) -> list[str]:
+    return [text[i : i + size] for i in range(0, len(text), size)] or [""]
+
+
+def make_server(port: int = 0, chunk_delay: float = 0.0) -> ThreadingHTTPServer:
     state: dict = {"items": [dict(item) for item in SEED]}
-    return ThreadingHTTPServer(("127.0.0.1", port), _handler_factory(state))
+    return ThreadingHTTPServer(("127.0.0.1", port), _handler_factory(state, chunk_delay))
 
 
-def serve_in_thread(port: int = 0) -> tuple[ThreadingHTTPServer, str]:
-    server = make_server(port)
+def serve_in_thread(port: int = 0, chunk_delay: float = 0.0) -> tuple[ThreadingHTTPServer, str]:
+    server = make_server(port, chunk_delay)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server, f"http://127.0.0.1:{server.server_address[1]}"
 
@@ -91,9 +100,10 @@ def serve_in_thread(port: int = 0) -> tuple[ThreadingHTTPServer, str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="假 legacy 后端（开发用）")
     parser.add_argument("--port", type=int, default=8891)
+    parser.add_argument("--chunk-delay", type=float, default=0.0, help="SSE 分片间隔秒数（流式演示）")
     parser.add_argument("--stop-after", type=float, default=0.0, help="多少秒后自动退出（0=一直跑）")
     args = parser.parse_args(argv)
-    server, url = serve_in_thread(args.port)
+    server, url = serve_in_thread(args.port, args.chunk_delay)
     print(json.dumps({"ok": True, "url": url}, ensure_ascii=False), flush=True)
     try:
         if args.stop_after > 0:
