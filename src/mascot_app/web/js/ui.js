@@ -25,7 +25,6 @@
     el.textContent = banner;
     el.className = 'banner' + (banner ? ' show' : '');
 
-    $('hint').textContent =
-      state === 'orbital' ? '点小球回到面板' : state === 'idle_open' ? '宠物没开也能聊' : '点小球可收进屏幕边缘';
+    /* M34：底部提示行已撤掉（用户反馈没有存在理由）；收进小球只走标题栏头像。 */
   };
 })();

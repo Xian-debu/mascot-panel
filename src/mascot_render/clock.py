@@ -45,6 +45,16 @@ def clock_angles(
     return hour_angle, min_angle, sec_angle
 
 
+def star_anchors(
+    now: time.struct_time, c: int, len_h: int, len_m: int
+) -> tuple[tuple[int, int], tuple[int, int]]:
+    """两颗星光的位置：大星在时针尖、小星在分针尖（像素网格坐标）。"""
+    hour_angle, min_angle, _ = clock_angles(now.tm_hour, now.tm_min, now.tm_sec)
+    hour_star = (round(c + len_h * math.cos(hour_angle)), round(c + len_h * math.sin(hour_angle)))
+    min_star = (round(c + len_m * math.cos(min_angle)), round(c + len_m * math.sin(min_angle)))
+    return hour_star, min_star
+
+
 def _draw_alert_ring(
     img: Image.Image, cx: int, cy: int, r: float, palette: dict[str, str]
 ) -> None:
@@ -152,8 +162,6 @@ def _render_sprite(
     )
 
     hour_angle, min_angle, sec_angle = clock_angles(now.tm_hour, now.tm_min, now.tm_sec)
-    hour_tick = round(now.tm_hour % 12 * 5 + now.tm_min / 12 ) % 12
-    min_tick = round(now.tm_min / 5) % 12
     tick_r = r - 2
 
     # 12 个刻度：3 的倍数是短线，其余是单像素点
@@ -168,20 +176,11 @@ def _render_sprite(
         else:
             dr.rectangle([tx, ty, tx, ty], fill=(*p_cyan, 170))
 
-    # 时分位置各一颗星光，秒针靠近刻度时点亮
-    for i in range(12):
-        a = (i * 30 - 90) * math.pi / 180
-        tx = round(c + tick_r * math.cos(a))
-        ty = round(c + tick_r * math.sin(a))
-        if i == hour_tick:
-            _draw_sparkle(dr, tx, ty, True, p_bright, pulse)
-        elif i == min_tick:
-            _draw_sparkle(dr, tx, ty, False, p_white, pulse)
-
     # 指针：时=短粗、分=中、秒=细长
     len_h = max(5, round(ball_cells * 0.42))
     len_m = max(7, round(ball_cells * 0.62))
     len_s = max(9, round(ball_cells * 0.78))
+
     dr.line(
         [c, c, round(c + len_h * math.cos(hour_angle)), round(c + len_h * math.sin(hour_angle))],
         fill=(*p_cyan, 255),
@@ -202,6 +201,12 @@ def _render_sprite(
         fill=(*p_cyan, 255),
         width=1,
     )
+
+    # 星光跟着指针走（M34）：以前按“最近的 5 分钟刻度”取整，分钟星最多偏
+    # 15°，用户反馈“位置完全不准”。现在大星=时针尖、小星=分针尖，连续对齐。
+    (hx_star, hy_star), (mx_star, my_star) = star_anchors(now, c, len_h, len_m)
+    _draw_sparkle(dr, hx_star, hy_star, True, p_bright, pulse)
+    _draw_sparkle(dr, mx_star, my_star, False, p_white, pulse)
 
     # 中心轴
     dr.rectangle([c - 1, c - 1, c + 1, c + 1], fill=(*p_navy, 255))

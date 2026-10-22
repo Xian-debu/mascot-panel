@@ -417,6 +417,20 @@ def move_window(hwnd: int, x: int, y: int) -> None:
     )
 
 
+def move_window_keep_z(hwnd: int, x: int, y: int) -> None:
+    """只改位置，不重排 Z 序（M34：环绕态每帧移动时避免 TOPMOST 重新插入造成闪烁）。"""
+    _require_windows()
+    _user32.SetWindowPos(
+        wt.HWND(hwnd),
+        wt.HWND(0),
+        x,
+        y,
+        0,
+        0,
+        SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+    )
+
+
 def move_window_below(hwnd: int, x: int, y: int) -> None:
     """只改位置、不动 Z 序、不激活（跟随用；避免每帧抢焦点）。"""
     _require_windows()

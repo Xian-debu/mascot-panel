@@ -254,12 +254,13 @@ class LayeredWindow:
         try:
             ctypes.memmove(bits, raw, len(raw))
             old = win32._gdi32.SelectObject(mem_dc, hbmp)
-            dst = wt.POINT(0, 0)
+            # M34：pptDst 传 NULL = 位置不变。以前传 (0,0) 会让窗口每帧
+            # 先跳到屏幕左上角再被 move() 搬回来 —— 环绕态每帧闪一下。
             src = wt.POINT(0, 0)
             size = win32.SIZE(self.width, self.height)
             blend = win32.BLENDFUNCTION(win32.AC_SRC_OVER, 0, 255, win32.AC_SRC_ALPHA)
             win32._user32.UpdateLayeredWindow(
-                wt.HWND(self.hwnd), screen_dc, ctypes.byref(dst), ctypes.byref(size),
+                wt.HWND(self.hwnd), screen_dc, None, ctypes.byref(size),
                 mem_dc, ctypes.byref(src), 0, ctypes.byref(blend), win32.ULW_ALPHA,
             )
             win32._gdi32.SelectObject(mem_dc, old)
@@ -270,7 +271,7 @@ class LayeredWindow:
 
     def move(self, x: int, y: int) -> None:
         self._pos = (int(x), int(y))
-        win32.move_window(self.hwnd, int(x), int(y))
+        win32.move_window_keep_z(self.hwnd, int(x), int(y))
 
     def enable_drag(
         self,
