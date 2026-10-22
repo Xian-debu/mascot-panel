@@ -4,7 +4,7 @@
 旧实现 `E:\TX-Pet`（483 行单文件壳 + 919 行单文件 SPA，无版本控制）**冻结保留**，本仓库与其零共享代码。
 
 > 规划与决策记录在 `/root/mascot-admin`（管理仓库）。本仓库只承载产品代码。
-> 当前阶段：**M0**（骨架与决策冻结）。
+> 当前阶段：**M3 完成**（渲染迁移与快照基线），下一步 M4（面板拆分 + 聊天流 + 降级 UI）。
 
 ## 它是什么
 
@@ -19,12 +19,14 @@ src/mascot_core/    纯逻辑（无 Win32、可 Ubuntu CI 单测）
   hit.py              命中测试纯函数
   state.py            状态机（idle/tracking/orbital/degraded）+ 原因码
   config.py           pydantic-settings 配置（TOML + 环境变量）
-  tokens.py           设计令牌 → CSS 变量 + PIL 调色板
+  tokens.py           设计令牌 → CSS 变量 + PIL 调色板（唯一颜色真源）
   contract.py         ChatProvider 协议与 DTO
 src/mascot_win/     Windows 平台层（仅 windows-latest 测）
-src/mascot_render/  渲染（PIL 画球，快照测）
-src/mascot_app/     组装与 CLI（run / doctor / ctl / deploy）
-web/                跟随框前端（拆分为多模块）
+src/mascot_render/  渲染（PIL 画球/状态灯 + 快照画廊）
+src/mascot_app/     组装与 CLI（run / doctor / ctl），web/panel.html 面板前端
+tests/unit/         纯逻辑单测         tests/snapshot/  像素基线
+tests/platform/     Win32 平台测试     tests/contract/  provider 契约
+scripts/            deploy-win.sh（发布到 Windows 开发副本）、verify_m2.py、make_baselines.py
 ```
 
 ## 快速开始
@@ -32,7 +34,7 @@ web/                跟随框前端（拆分为多模块）
 ```bash
 uv sync --group dev
 uv run mascot doctor          # 环境体检（JSON）
-uv run pytest                 # 纯逻辑单测（Linux/Windows 均可）
+uv run pytest                 # 纯逻辑 + 快照基线（Linux/Windows 均可）
 uv run ruff check . && uv run pyright
 ```
 
@@ -51,5 +53,7 @@ scripts/deploy-win.sh         # 同步到 C:/Users/Public/mascot/app/<ver>/ 并�
 
 - 一步一提交，subject：`<范围>: <做了什么>`，body 写"为什么 + 实测数字"。
 - 纯逻辑必须有单测；平台相关代码必须能在无桌面的 CI 上跳过而不失败。
+- 颜色/字号/圆角只允许定义在 `mascot_core.tokens`，HTML 与 PIL 都从它派生（`test_token_contract` 把关）。
+- 改了绘制就重跑 `scripts/make_baselines.py` 并提交新基线。
 - 不硬编码用户路径、盘符、发行版名、端口。
 - 详见 `AGENTS.md`。

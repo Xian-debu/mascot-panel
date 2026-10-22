@@ -112,3 +112,32 @@ Linux: ruff 0 / pyright 0 / pytest 37 passed
 - 面板内容仍是联调占位，不是真聊天流（M4）。
 - `ctl stop` 依赖窗口标题找 hwnd；面板被隐藏时退化为 kill（M5 前补 pid 兜底）。
 - 球不能拖拽/记忆落点（P1）。
+## M3 渲染迁移与快照基线 — 完成（2026-10-22 夜）
+
+**做了什么**
+- 设计令牌一份真源落地：`panel.html` 只留 `/*__TOKENS__*/` 占位，`load_panel_html()` 注入
+  `tokens.css_variables()`；新增派生变量 `--accent-soft/--accent-line/--amber-soft/--amber-line`
+  （`tokens.ALPHA_VARS`）。
+- CSS 全部改用 `var(--x)`，并修掉一批“从未定义、靠浏览器 fallback 才没崩”的幽灵变量
+  （`--muted`/`--r-chip`/`--motion` → `--text-dim`/`--r-card`/`--base`）。
+- `mascot_render/ball.py`：球与状态灯取色全部来自 token；修掉高光用 ImageDraw 直接覆盖导致的
+  “球心半透明灰点”，改为独立图层 + `Image.alpha_composite`。
+- 快照体系：`mascot_render/gallery.py`（用例表 + 暗底拼图）、`scripts/make_baselines.py`、
+  `tests/snapshot/test_render_snapshot.py`，基线 9 张入库。
+- 契约测试 `tests/unit/test_token_contract.py`：占位符替换、`var(--x)` 全部已声明、CSS 无写死 hex、
+  状态灯 token 名有效。
+
+**怎么验证**
+```
+Linux:   ruff 0 / pyright 0 / pytest 50 passed
+Windows: pytest tests/snapshot -q -> 9 passed（Pillow 13.0.0）
+真机:    evidence/m3-panel.png（token 注入后面板正常）、
+        evidence/m3-render-gallery.png（呼吸四帧 + 琥珀球 + 四态灯）
+```
+
+**提交**：见 git log（render/tests/docs/17）
+
+**已知缺口**
+- 字号/间距 token 已进 CSS，但 JS 未消费（M4 拆面板时统一）。
+- 球仍是实时相位渲染，没有离散像素帧（P2）。
+- 面板整体外观仍靠人眼验收（M5 打包后可做固定尺寸快照）。
