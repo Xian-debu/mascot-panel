@@ -130,13 +130,35 @@ def test_reset_ball_clears_saved_position() -> None:
 
 def test_reset_panel_clears_saved_position() -> None:
     rt = make_runtime()
-    from mascot_app.runtime import CMD_RESET_PANEL, load_panel_pos, save_panel_pos
+    from mascot_app.runtime import (
+        CMD_RESET_PANEL,
+        load_panel_offset,
+        load_panel_pos,
+        save_panel_offset,
+        save_panel_pos,
+    )
 
     rt._panel_pos = (10, 20)  # noqa: SLF001
+    rt._panel_offset = (5, 6)  # noqa: SLF001
     save_panel_pos((10, 20))
+    save_panel_offset((5, 6))
     rt._on_tray_command(CMD_RESET_PANEL)  # noqa: SLF001
     assert rt._panel_pos is None  # noqa: SLF001
+    assert rt._panel_offset is None  # noqa: SLF001
     assert load_panel_pos() is None
+    assert load_panel_offset() is None
+
+
+def test_panel_offset_roundtrip_and_noop_for_bad_data() -> None:
+    from mascot_app.runtime import _write_runtime, load_panel_offset, save_panel_offset
+
+    assert load_panel_offset() is None
+    save_panel_offset((12, -8))
+    assert load_panel_offset() == (12, -8)
+    _write_runtime({"panel_offset": ["a", 1]})
+    assert load_panel_offset() is None
+    save_panel_offset(None)
+    assert load_panel_offset() is None
 
 
 def test_panel_pos_roundtrip_and_noop_for_bad_data() -> None:

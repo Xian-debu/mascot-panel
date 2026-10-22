@@ -158,6 +158,15 @@ def load_panel_pos() -> tuple[int, int] | None:
     return _load_pos("panel_pos")
 
 
+def load_panel_offset() -> tuple[int, int] | None:
+    """用户拖动时记下的「面板相对宠物窗口」偏移（M27）。"""
+    return _load_pos("panel_offset")
+
+
+def save_panel_offset(offset: tuple[int, int] | None) -> None:
+    _save_pos("panel_offset", offset)
+
+
 def save_panel_pos(pos: tuple[int, int] | None) -> None:
     """记住/清除面板位置；None 表示回到默认（待机右下角 / 跟随宠物）。"""
     _save_pos("panel_pos", pos)
@@ -352,6 +361,8 @@ class Runtime:
         # 待机球位置：用户拖过就记住（宠物不在时也不回角落）
         self._ball_pos: tuple[int, int] | None = load_ball_pos()
         self._panel_pos: tuple[int, int] | None = load_panel_pos()
+        # 跟随态拖出来的面板记偏移（跟着宠物走）；待机态拖出来记绝对位置
+        self._panel_offset: tuple[int, int] | None = load_panel_offset()
         self._panel_dirty = False
         # 待机球单击/双击：单击开面板、双击回右下角（靠 350ms 时间窗区分，见 click.py）
         self._click_gate = ClickGate()
@@ -845,7 +856,19 @@ class Runtime:
         if self._panel_dirty and self._panel_pos is not None:
             # 拖完稳定了再落盘：拖动过程中每帧写盘太吵
             save_panel_pos(self._panel_pos)
+            save_panel_offset(self._panel_offset)
             self._panel_dirty = False
+        if self._pet is not None and self._panel_offset is not None:
+            # 跟随态拖出来的面板：跟着宠物一起走，保持用户选好的相对位置（M27）
+            x, y = self._clamp_panel(
+                (width, height),
+                (self._pet.x + self._panel_offset[0], self._pet.y + self._panel_offset[1]),
+            )
+            rect = Rect(x, y, width, height)
+            if force or rect != self._last_panel_rect:
+                win32.move_window_below(self._panel_hwnd, rect.x, rect.y)
+                self._last_panel_rect = rect
+            return
         if self._panel_pos is not None:
             # 用户钉住的位置：只要还落在某块屏的工作区里就尊重它
             x, y = self._clamp_panel((width, height), self._panel_pos)
@@ -883,6 +906,17 @@ class Runtime:
                 log.info("panel_moved", extra={"detail": f"{pos[0]},{pos[1]}"})
             self._panel_pos = (int(pos[0]), int(pos[1]))
             self._panel_dirty = True
+        pet = self._pet
+        if pet is not None:
+            # 宠物在：记相对偏移，之后宠物移动面板跟着走
+            offset = (int(pos[0]) - pet.x, int(pos[1]) - pet.y)
+            if offset != self._panel_offset:
+                log.info("panel_offset", extra={"detail": f"{offset[0]},{offset[1]}"})
+                self._panel_offset = offset
+        elif self._panel_offset is not None:
+            # 待机态拖出来的是绝对位置：清掉偏移，等宠物回来用默认跟随位置
+            log.info("panel_offset_cleared")
+            self._panel_offset = None
         width, height = size
         self._last_panel_rect = Rect(pos[0], pos[1], width, height)
 
@@ -900,6 +934,8 @@ class Runtime:
         """取消拖动记忆：回到默认位置（待机右下角 / 跟随宠物）。"""
         self._panel_pos = None
         save_panel_pos(None)
+        self._panel_offset = None
+        save_panel_offset(None)
         self._last_panel_rect = None
         self._place_panel(force=True)
         log.info("panel_reset")
