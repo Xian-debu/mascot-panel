@@ -33,3 +33,23 @@ uv run mascot ctl status   -> {"ok":true,"data":{"running":false,...}} exit=0
 **已知缺口**
 - `mascot run` 仍是占位（exit 3 ENV_NOT_READY）：窗口接线在 M1/M2。
 - 尚未在 Windows Python 上跑过：下一节 M0.5 处理。
+## M0.5 Windows 侧验证 — 完成（2026-10-22 夜）
+
+**做了什么**
+- `scripts/deploy-win.sh` 发布到 `C:/Users/Public/mascot/app/0.1.0`（rsync + MANIFEST.sha256 + current.txt 原子指针）。
+- 在该目录建独立 venv（`C:/Users/Public/mascot/venv`，不碰用户全局 Python），`pip install app/0.1.0` 成功。
+
+**怎么验证（Windows Python 3.11.9）**
+```
+venv/Scripts/python.exe -m mascot_app.cli doctor --offline
+-> {"ok":true,...} exit=0
+   python 3.11.9 / dependencies all present / state_dir C:\Users\ZYX\AppData\Local\mascot
+   platform Windows 10 (AMD64)
+```
+依赖实际版本：pywebview 6.2.1、pillow 13.0.0、pydantic-settings 2.16.1、psutil 7.2.2。
+
+**提交**：46d2728 deploy 脚本 / 本节见下一提交
+
+**已知缺口**
+- 尚未创建任何 GUI 窗口：M1 才开始平台 spike。
+- 部署副本与源码可能版本漂移：每次改动后必须重跑 deploy-win.sh（后续 M5 用 PyInstaller 收口）。
