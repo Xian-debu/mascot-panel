@@ -14,13 +14,15 @@ import importlib.util
 import json
 import os
 import platform
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 from mascot_app import __version__, boot
 from mascot_app.logging_setup import setup_logging
 from mascot_app.providers import make_provider
-from mascot_core import configfile, versions
+from mascot_core import configfile, update, versions
 from mascot_core.config import HOT_FIELDS, Settings, default_config_path, load_settings
 
 EXIT_OK = 0
@@ -345,6 +347,68 @@ def _app_dir(override: str | None) -> Path:
     return base / "app"
 
 
+def _infer_version(source: Path) -> str:
+    """从源目录/zip 名或 exe 的 --version 输出推断版本号。"""
+    name = source.stem if source.is_file() else source.name
+    if versions.is_version_name(name):
+        return name
+    exe = source / "mascot.exe"
+    if exe.is_file():
+        with contextlib.suppress(OSError, IndexError):
+            proc = subprocess.run(
+                [str(exe), "--version"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            parts = (proc.stdout or "").replace("mascot", " ").split()
+            if parts and versions.is_version_name(parts[-1]):
+                return parts[-1]
+    raise ValueError("推断不出版本号，请用 --version 指定（如 --version 0.2.0）")
+
+
+def _stop_running_instance() -> bool:
+    """升级前停掉正在跑的实例（Windows 会锁住正在使用的 exe/dll）。"""
+    pid = _running_pid()
+    if pid is None:
+        return False
+    _send_control("stop")
+    deadline = time.monotonic() + 8.0
+    while time.monotonic() < deadline:
+        if _running_pid() is None:
+            return True
+        time.sleep(0.2)
+    return True
+
+
+def cmd_update(args: argparse.Namespace) -> int:
+    """就地升级：装到 app/<version>，原子切 current.txt，回收旧目录。"""
+    app_dir = _app_dir(args.app_dir)
+    source = Path(args.source)
+    try:
+        version = args.target_version or _infer_version(source)
+        kind = update.source_kind(source)
+    except ValueError as exc:
+        return _fail("UPDATE_SOURCE", str(exc), EXIT_ARGS)
+    stopped = False if args.dry_run else _stop_running_instance()
+    try:
+        res = update.install(
+            source,
+            app_dir,
+            version,
+            keep=args.keep,
+            dry_run=args.dry_run,
+            force=args.force,
+        )
+    except ValueError as exc:
+        return _fail("UPDATE_REJECTED", str(exc), EXIT_ARGS)
+    except OSError as exc:
+        return _fail("UPDATE_FAILED", str(exc), EXIT_FAIL)
+    res["kind"] = kind
+    res["stopped"] = stopped
+    res["restart_hint"] = "mascot.exe run"
+    return _emit({"ok": True, "data": res}, EXIT_OK)
+
 def cmd_versions(args: argparse.Namespace) -> int:
     """列出/回收已安装的版本目录（current 永不删）。"""
     app_dir = _app_dir(args.app_dir)
@@ -470,6 +534,15 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--dry-run", action="store_true", help="prune 只报告不删除")
     v.add_argument("--app-dir", help="覆盖 app 目录（验收用）")
     v.set_defaults(func=cmd_versions)
+
+    u = sub.add_parser("update", help="就地升级：从本地目录或 zip 安装新版本")
+    u.add_argument("--from", dest="source", required=True, help="含 mascot.exe 的目录，或 .zip")
+    u.add_argument("--version", dest="target_version", help="新版本号（默认从源目录名或 exe --version 推断）")
+    u.add_argument("--keep", type=int, default=2, help="装完保留几个版本（含新版本，默认 2）")
+    u.add_argument("--dry-run", action="store_true", help="只报计划，不动磁盘")
+    u.add_argument("--force", action="store_true", help="允许覆盖同一版本")
+    u.add_argument("--app-dir", help="覆盖 app 目录（验收用）")
+    u.set_defaults(func=cmd_update)
 
     c = sub.add_parser("ctl", help="控制运行中的实例")
     c.add_argument(

@@ -1,6 +1,6 @@
 # 进度报告（自动维护，供明早阅读）
 
-## 明早先读：2026-10-22 夜间交付总结（更新至 M22）
+## 明早先读：2026-10-22 夜间交付总结（更新至 M23）
 
 **做完了什么**：按 docs/10-plan.md 推进 M0→M13，产品仓库 /root/mascot
 （骨架 → 纯逻辑层 → CLI/provider → CI/进度 → 部署 → M1 平台 spike → M2 运行时 → M3 渲染 →
@@ -8,8 +8,8 @@ M4 面板与聊天 → M5 打包交付 → M6a/b/c 视觉对齐（像素时钟�
 M8 冷启动 → M9 免打扰与多屏定位 → M10 接上旧聊天后端 → M11 流式增量与停止生成 →
 M12 配置写回与开关持久化 → M13 待机形态 → M14 待机球像素时钟化/可拖动/记忆位置 →
 M15 聊天记录跨重启保留与清空 → M16 待机球右键菜单/边缘吸附/回到右下角 →
-M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真回滚 → M19 配置热重载 → M20 历史条数可配置 → M21 health 独立短超时 → M22 clear-history 对后端 history 也生效）。
-管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023、M18 的 SG-0024、M19 的 SG-0025、M20 的 SG-0026、M21 的 SG-0027、M22 的 SG-0028 见当天提交）。
+M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真回滚 → M19 配置热重载 → M20 历史条数可配置 → M21 health 独立短超时 → M22 clear-history 对后端 history 也生效 → M23 就地升级命令 update）。
+管理仓库 /root/mascot-admin 补齐 SG-0001…SG-0018 自授权清单（M13 的 SG-0019、M14 的 SG-0020、M15 的 SG-0021、M16 的 SG-0022、M17 的 SG-0023、M18 的 SG-0024、M19 的 SG-0025、M20 的 SG-0026、M21 的 SG-0027、M22 的 SG-0028、M23 的 SG-0029 见当天提交）。
 
 **现在能做什么**（Windows 上已装好）：
 ```
@@ -18,6 +18,7 @@ C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe doctor     # 体检
 C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe ctl status # 看状态（含 boot 分段、dnd、paused）
 C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe ctl dnd on # 免打扰：不自动弹面板
 C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe ctl stop   # 退出
+C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe update --from <目录|zip>  # 就地升级（自动切 current.txt、回收旧目录）
 C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、起旧版
 ```
 右击托盘图标有：显示面板 / 收进小球 / 暂停跟随 / 免打扰 / 开机自启 / 退出；双击托盘=面板与小球互切。
@@ -26,7 +27,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
 **验证过的硬事实**：
 - Linux：ruff 0 / pyright 0 / pytest 全绿；Windows：全量回归通过；M10 验收 9/9、M11 验收 15/15、
   M12 验收 16/16、M13 验收 10/10、M14 验收 9/9、M15 验收 14/14、M16 验收 7/7、
-  M17 验收 12/12、M18 验收 15/15、M19 验收 17/17、M20 验收 16/16、M21 验收 15/15、M22 验收 14/14 PASS。
+  M17 验收 12/12、M18 验收 15/15、M19 验收 17/17、M20 验收 16/16、M21 验收 15/15、M22 验收 14/14、M23 验收 26/26 PASS。
 - 真机跟随 TX-Pet 窗口（961,459 / 1616,272，随窗口移动）、面板与环绕球同进程共存、ctl 全动作可用、
   托盘菜单与双击互切可用、安装/卸载/回滚/双跑/自启逐个跑过（evidence/m5-*、m6*、m7-*、m8-*、m9 验收输出）。
 - 冷启动 **进程创建→面板可见 0.70 s**（安装版 0.71–0.87 s），此前 4.34 s；DoD ≤2 s 已达成（docs/24）。
@@ -44,7 +45,7 @@ C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、
    起在 127.0.0.1:8890，面板就能真聊（历史来自 /api/pet/news，回复由 SSE 分片拼接）。
    注意：真旧后端需要 API Key，我今晚只用一个模拟旧后端的假服务验证过（scripts/verify_m10.py 9/9 PASS）。
 
-**已知缺口**：未签名（SmartScreen 可能提示）、无自动更新、
+**已知缺口**：未签名（SmartScreen 可能提示）、无网络自动更新（M23 只支持本地目录/zip 升级）、
 面板立绘仍引用旧项目资源（未迁入本仓库）、旧后端未用真实 API Key 实测、
 待机球吸附只在松手时生效（无拖动中橡皮筋、无双击复位）。
 
@@ -552,3 +553,14 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 坑：只清本地等于没清；按内容指纹过滤会误伤重复发言，必须用 id；无 id 消息不能进集合。
 - 遗留：远端仍留旧对话（换设备/删 runtime.json 会再现）；cleared_history_ids 上限 200 条、按字典序截断（非时间序）、无过期。
 - 交付：docs/38-m22-clear-history.md；build-win.sh + install-win.sh 已跑。
+
+### M23 就地升级命令 update（2026-10-22 夜）
+
+- 痛点：已知缺口「无自动更新」——升级只能跑 WSL 里的 install-win.sh，普通用户拿到新版本没法自己装。
+- 新增 mascot_core/update.py：source_kind（目录必须含 mascot.exe / .zip）、_safe_extract（拒 zip slip）、_locate_exe_root（兼容多套一层目录）、install(source, app_dir, version, keep, dry_run, force)。
+- install 顺序：校验版本号 → 同版本无 --force 拒绝 → 复制/解压到 app/.incoming-<v> → 成功后才删旧目录并 rename → 原子写 current.txt → prune_versions 回收旧目录；任何异常清掉半成品。dry-run 只报 target/previous/would_remove。
+- cli 新增 update 子命令（--from/--version/--keep/--dry-run/--force/--app-dir）；_infer_version 从目录名或 exe --version 推断；_stop_running_instance 升级前用 ctl 停实例（Windows 锁 exe）。
+- 验收 scripts/verify_m23.py 26/26 PASS（临时 app-dir + 假 exe）：目录安装/版本推断/切指针/保留回滚目录/keep=2 回收/dry-run 不动盘/同版本需 --force/zip 多套一层/坏来源退出码 2/无 .incoming 残留。
+- 坑：Windows 的 subprocess text=True 用 GBK，中文报错让 json.loads 拿到空 stdout（验收要 encoding=utf-8）；不能先删再装（先装 .incoming 再 rename）；升级前必须停实例。
+- 遗留：仍无网络自动更新与签名校验；不支持 MSI；装完不自动拉起。
+- 交付：docs/39-m23-update.md；build-win.sh + install-win.sh 已跑。
