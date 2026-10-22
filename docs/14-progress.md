@@ -1,5 +1,49 @@
 # 进度报告（自动维护，供明早阅读）
 
+## 明早先读：2026-10-22 夜间交付总结
+
+**做完了什么**：按 docs/10-plan.md 的 M0→M5 全部推进完毕，产品仓库 /root/mascot
+（提交轨迹：仓库骨架 → 纯逻辑层 → CLI/provider → CI/进度 → M0.5 部署 → M1 平台 spike →
+M2 运行时 → M3 渲染 → M4 面板与聊天 → M5 打包交付）。管理仓库 /root/mascot-admin
+补齐 SG-0001…SG-0009 自授权清单。
+
+**现在能做什么**（Windows 上已装好；路径用正斜杠展示，资源管理器里同样可点开）：
+```
+C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe            # 双击/无参数 = GUI
+C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe doctor     # 体检
+C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe ctl status # 看状态
+C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe ctl stop   # 退出
+C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、起旧版
+```
+注意：**开机自启当前是关闭的**（安装时没加 --autostart），要开：`mascot.exe autostart on`。
+
+**验证过的硬事实**（细节见各里程碑小节与 docs/19-m5-delivery.md）：
+- Linux：ruff 0 / pyright 0 / pytest 68 passed；Windows：同套测试 68 passed（1 skip）。
+- 真机：跟随真实 TX-Pet 窗口（1616,272 180×180）、面板/环绕球同进程共存、ctl 全动作可用。
+- 打包：onedir 单 exe，双击=GUI（无控制台闪窗），带参数=CLI；冻结态面板资源正常。
+- 安装/卸载/回滚/双跑/自启 全部逐个跑过并留了截图（evidence/m5-*.png、m4-*.png、m3-*.png）。
+
+**需要你拍板/知情的 3 件事**：
+1. **旧目录我加了一个文件** E:/TX-Pet/FROZEN.md（只新增、未改未删）。它来自 docs/10 §10 的要求，
+   但和 docs/13 §4“不动旧目录”冲突，已按规则写进 SG-0008；不认可直接删掉即可。
+2. **冷启动 4.34 s**，没达到 DoD 的 ≤2 s（pythonnet/clr + pywebview 初始化成本）。不影响可用性，
+   优化方案列在 docs/19-m5-delivery.md §8，等你决定要不要为它花时间。
+3. **功能三档**：docs/12 的“基线包/提质包/氛围包”还等你选（当时问的三个问题：托盘图标要不要、
+   氛围层要不要、聊天框要不要做流式）。M5 之后按你的选择继续。
+
+**已知缺口**：未签名（SmartScreen 可能提示）、无自动更新、旧版本目录不自动回收、
+面板立绘仍引用旧项目资源（未迁入本仓库）、无流式输出、消息不落盘。
+
+**仓库位置**：
+- 产品：/root/mascot（git，README 有结构与命令）
+- 管理：/root/mascot-admin（规划、调研、决策、自授权清单；authorization/self-grants.md 倒序读）
+- Windows 安装：%LOCALAPPDATA%/mascot/app/0.1.0/（current.txt 指针 + rollback.bat）
+- 旧版（冻结）：E:/TX-Pet/（可双跑、可回滚）
+
+---
+
+
+
 > 每个里程碑完成后追加一节；每条含"做了什么 / 怎么验证 / 提交号 / 已知缺口"。
 > 规划基线：`/root/mascot-admin/docs/10-plan.md`。
 
