@@ -701,3 +701,10 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 
 - 面板开着不闪，只在收成小球时亮 2.5s；颜色随状态走：正常青 / 降级琥珀 / 出错红（新增 PIXEL_RED）。
 - 验证：ctl to-ball 后 ctl send 截图到青环；坏 key 实例小球态 ctl send 得到「琥珀球 + 红环」。
+
+
+
+### M48 面板窗口圆角（2026-10-23，用户 m03785）
+
+- 透明四角露出 WinForms 灰底 → 用 SetWindowRgn 把面板窗口裁成圆角矩形（半径跟 tokens.RADIUS["r-panel"] 走，按 DPI 换算）。
+- 详见 docs/60-window-corners.md；DWM 系统圆角半径固定 8px、与 14px 对不上所以没采用。

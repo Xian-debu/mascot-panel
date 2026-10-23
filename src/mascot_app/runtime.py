@@ -53,7 +53,7 @@ from mascot_core.state import (
     State,
     Transition,
 )
-from mascot_core.tokens import THEMES, css_variables, theme_css, theme_options
+from mascot_core.tokens import RADIUS, THEMES, css_variables, theme_css, theme_options
 
 log = logging.getLogger(__name__)
 
@@ -1714,6 +1714,9 @@ class Runtime:
         hwnd = win32.find_window(PANEL_TITLE, timeout_s=10.0)
         if hwnd:
             win32.add_toolwindow(hwnd)
+            with contextlib.suppress(Exception):
+                # 四角是窗口的方角，透明背景在那里会露出 WinForms 灰底（用户 m03785 报的「灰色直角」）
+                win32.round_corners(hwnd, float(RADIUS["r-panel"]))
             self._panel_hwnd = hwnd
             boot.mark("panel_hwnd")
         return hwnd

@@ -133,6 +133,14 @@ def _declare_64bit_safe_prototypes() -> None:
         wt.HDC, ctypes.POINTER(wt.POINT), wt.DWORD, ctypes.POINTER(BLENDFUNCTION), wt.DWORD,
     ]
     u.UpdateLayeredWindow.restype = wt.BOOL
+    u.SetWindowRgn.argtypes = [wt.HWND, wt.HRGN, wt.BOOL]
+    u.SetWindowRgn.restype = ctypes.c_int
+    u.GetDpiForWindow.argtypes = [wt.HWND]
+    u.GetDpiForWindow.restype = wt.UINT
+    g.CreateRoundRectRgn.argtypes = [
+        ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+    ]
+    g.CreateRoundRectRgn.restype = wt.HRGN
     u.SetWindowPos.argtypes = [
         wt.HWND, wt.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wt.UINT,
     ]
@@ -454,6 +462,27 @@ def add_toolwindow(hwnd: int) -> None:
     """WS_EX_TOOLWINDOW：不出现在 Alt+Tab 与任务栏。"""
     _require_windows()
     _set_ex_style(hwnd, _get_ex_style(hwnd) | WS_EX_TOOLWINDOW)
+
+
+def round_corners(hwnd: int, radius_logical: float = 14.0) -> bool:
+    """把窗口裁成圆角矩形：透明背景的方角会露出 WinForms 的灰底。
+
+    为什么不用 DWM 的 DWMWA_WINDOW_CORNER_PREFERENCE：Win11 的系统圆角半径固定
+    （8 逻辑像素），和面板 CSS 的 14px 对不上，半径 8~14 之间那条灰边还会留着。
+    窗口区域是 1-bit 的，边界没有抗锯齿；半径够大（物理 21px）时观感可接受，
+    而且比四角灰色直角干净得多。
+    """
+    _require_windows()
+    w, h = get_window_rect(hwnd)[2:]
+    if w <= 0 or h <= 0:
+        return False
+    dpi = int(_user32.GetDpiForWindow(wt.HWND(hwnd)) or 96)
+    r = max(2, round(radius_logical * dpi / 96.0))
+    rgn = _gdi32.CreateRoundRectRgn(0, 0, w + 1, h + 1, r * 2, r * 2)
+    if not rgn:
+        return False
+    # SetWindowRgn 成功后区域归系统所有，不需要（也不能）再 DeleteObject
+    return bool(_user32.SetWindowRgn(wt.HWND(hwnd), rgn, True))
 
 
 def console_hwnd() -> int:
