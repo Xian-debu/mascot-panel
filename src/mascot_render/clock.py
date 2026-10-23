@@ -19,7 +19,7 @@ import time
 
 from PIL import Image, ImageDraw
 
-from mascot_core.tokens import PIXEL, PIXEL_AMBER, hex_to_rgb
+from mascot_core.tokens import PIXEL, PIXEL_AMBER, PIXEL_RED, hex_to_rgb
 
 RGB = tuple[int, int, int]
 
@@ -35,8 +35,10 @@ def _rgb(name: str, palette: dict[str, str]) -> RGB:
     return hex_to_rgb(palette[name])
 
 
-def palette_for(stuck: bool) -> dict[str, str]:
-    """正常=青色家族；降级=琥珀家族（状态语义与面板状态灯一致）。"""
+def palette_for(stuck: bool, error: bool = False) -> dict[str, str]:
+    """正常=青色家族；降级=琥珀家族；出错=红家族（状态语义与面板状态灯一致）。"""
+    if error:
+        return PIXEL_RED
     return PIXEL_AMBER if stuck else PIXEL
 
 
@@ -240,6 +242,7 @@ def render_clock(
     stuck: bool = False,
     hover: bool = False,
     alert: bool = False,
+    alert_tone: str = "ok",
 ) -> Image.Image:
     """画一颗像素时钟球（返回 size×size 的 RGBA，球居中，四周透明）。"""
     if size < 16:
@@ -252,7 +255,13 @@ def render_clock(
     canvas.alpha_composite(sprite, ((size - sprite.width) // 2, (size - sprite.height) // 2))
     if alert:
         # M30 状态灯：新消息到达时在球外圈亮一圈像素，2.5s 后自动消失
-        _draw_alert_ring(canvas, size // 2, size // 2, max(6.0, size / 2 - 4), palette_for(stuck))
+        _draw_alert_ring(
+            canvas,
+            size // 2,
+            size // 2,
+            max(6.0, size / 2 - 4),
+            palette_for(stuck, alert_tone == "error"),
+        )
     return canvas
 
 
@@ -267,6 +276,7 @@ def render_orbit_frame(
     stuck: bool = False,
     hover: bool = False,
     alert: bool = False,
+    alert_tone: str = "ok",
     tail_deg: float = TAIL_DEG,
 ) -> Image.Image:
     """整帧：像素彗尾 + 球（球心按 angle_deg 落在 orbit_r 上）。供后续环绕态使用。"""
@@ -311,5 +321,5 @@ def render_orbit_frame(
     sprite = _render_sprite(ball_r * 2, now=now, stuck=stuck, hover=hover, pulse=0.5)
     img.alpha_composite(sprite, (round(bx - sprite.width / 2), round(by - sprite.height / 2)))
     if alert:
-        _draw_alert_ring(img, round(bx), round(by), ball_r + 8, pal)
+        _draw_alert_ring(img, round(bx), round(by), ball_r + 8, palette_for(stuck, alert_tone == "error"))
     return img

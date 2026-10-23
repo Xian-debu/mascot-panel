@@ -806,6 +806,7 @@ class Runtime:
         # 状态机是否要求面板可见；pywebview 的 hidden=True 并不保证启动后真的隐藏窗口
         # （实测启动 6s 时 WS_VISIBLE 仍为真），所以 GUI 线程起来后再按这个标志兜一次。
         self._panel_shown = False
+        self._alert_tone = "ok"
         self._panel_recheck = 0.0
         self._ball: Any = None
         self._pet: PetView | None = None
@@ -1518,6 +1519,7 @@ class Runtime:
                 # 记住这条没发出去的用户消息（原文 + id），面板上给「重试」
                 self._failed_text = text
                 self._failed_msg_id = sent.msg_id
+                self._mark_alert(error=True)
                 self._queue_offline(text, sent.msg_id)
                 # 刚失败过就先等一会儿再自动重发，别每 5s 撞一次 401
                 self._outbox_next = time.monotonic() + OUTBOX_RETRY_GAP_S
@@ -1760,8 +1762,20 @@ class Runtime:
         y = wy + wh - height - 24
         return max(wx, x), max(wy, y)
 
-    def _mark_alert(self) -> None:
-        """有新消息到达：小球亮 2.5s 提示环（M30 状态灯，不改状态机）。"""
+    def _mark_alert(self, error: bool = False) -> None:
+        """有新消息/出错：小球亮 2.5s 提示环（M30 状态灯，不改状态机）。
+
+        面板开着时用户已经看见消息了，再闪屏是噪声 —— 只在收成小球时提示。
+        颜色跟状态走：正常青、降级琥珀、出错红。
+        """
+        if self._panel_shown:
+            return
+        if error:
+            self._alert_tone = "error"
+        elif self._degraded:
+            self._alert_tone = "degraded"
+        else:
+            self._alert_tone = "ok"
         self._alert_until = time.monotonic() + ALERT_S
 
     def _alert_active(self) -> bool:
@@ -1780,6 +1794,7 @@ class Runtime:
             stuck=self._degraded,
             hover=False,
             alert=self._alert_active(),
+            alert_tone=self._alert_tone,
         )
         self._ball.render(image)
         half = BALL_SIZE // 2
@@ -2009,6 +2024,7 @@ class Runtime:
             angle_deg=math.degrees(angle),
             stuck=self._machine.state is State.DEGRADED,
             alert=self._alert_active(),
+            alert_tone=self._alert_tone,
         )
         cx, cy = pet_rect.center
         half = layout.window / 2
