@@ -1,7 +1,8 @@
-"""本地聊天记录（跨重启保留）。
+"""旧版本地聊天记录（history.json）的解析与合并。
 
-provider 的 history 只是后端给的（可能是空、可能每次启动重新生成欢迎语）；
-用户真正看到过的对话在这里落盘，重启后接着显示。纯函数，无 IO、无平台依赖。
+B1 起对话落在 sessions.json（mascot_core/sessions.py），这里只剩两件事：
+读旧文件做一次性迁移，以及消息列表的合并/清理工具（states 移植过来的纯函数）。
+纯函数，无 IO、无平台依赖。
 """
 
 from __future__ import annotations
@@ -50,14 +51,6 @@ def parse_history(raw: str) -> list[Message]:
         return []
     items = data.get("messages") if isinstance(data, dict) else data
     return parse_messages(items)
-
-
-def dump_history(messages: list[Message]) -> str:
-    return json.dumps(
-        {"version": 1, "messages": [m.to_dict() for m in messages]},
-        ensure_ascii=False,
-        indent=2,
-    )
 
 
 def _keys(msg: Message) -> tuple[tuple[str, str, int], tuple[str, str, int] | None]:
