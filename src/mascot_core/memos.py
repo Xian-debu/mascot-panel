@@ -189,7 +189,7 @@ class MemoStore:
         memo = Memo(
             mid=new_id(now, "m"),
             text=body[:MAX_TEXT],
-            title=(title or "").strip()[:MAX_TITLE],
+            title=((title or "").strip() or auto_title(body))[:MAX_TITLE],
             group=group,
             pinned=False,
             created_at=now,
