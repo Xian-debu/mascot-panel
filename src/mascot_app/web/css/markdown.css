@@ -26,3 +26,14 @@
 .msg .body.md .math-inline{white-space:nowrap;}
 .msg .body.md .katex{font-size:1.03em;}
 .msg .body.md pre{margin:var(--s2) 0;}
+/* 代码块语言标签与语法高亮（M42）：配色取 Tokyo Night 系，深底上对比够、不刺眼。 */
+.msg pre.has-lang{padding-top:16px;}
+.msg pre .code-lang{position:absolute;left:var(--s2);top:2px;font-family:var(--mono);
+  font-size:var(--fs-11);color:var(--text-dim);opacity:.75;pointer-events:none;}
+.msg pre .hl-kw{color:#7aa2f7;}
+.msg pre .hl-str{color:#9ece6a;}
+.msg pre .hl-num{color:#ffb86c;}
+.msg pre .hl-com{color:#6b7f8f;font-style:italic;}
+.msg pre .hl-fn{color:#7dcfff;}
+.msg pre .hl-op{color:#a9b1d6;}
+

@@ -430,6 +430,7 @@ CSS_MODULES = (
     "settings.css",
 )
 JS_MODULES = (
+    "highlight.js",
     "markdown.js",
     "state.js",
     "clock.js",

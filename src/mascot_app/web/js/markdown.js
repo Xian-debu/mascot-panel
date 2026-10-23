@@ -31,7 +31,7 @@
     return el;
   }
 
-  function codeEl(code) {
+  function codeEl(code, lang) {
     const pre = document.createElement('pre');
     const copy = document.createElement('button');
     copy.className = 'copy';
@@ -44,7 +44,15 @@
       setTimeout(function () { copy.textContent = '复制'; }, 1200);
     });
     const box = document.createElement('code');
-    box.textContent = code;
+    const name = M.highlightLang ? M.highlightLang(lang) : '';
+    if (!(M.highlightInto && M.highlightInto(box, code, lang))) { box.textContent = code; }
+    if (name) {
+      pre.className = 'has-lang';
+      const tag = document.createElement('span');
+      tag.className = 'code-lang';
+      tag.textContent = name;
+      pre.appendChild(tag);
+    }
     pre.appendChild(copy);
     pre.appendChild(box);
     return pre;
@@ -195,7 +203,7 @@
           buf.push(lines[i]); i++;
         }
         i++;
-        into.appendChild(codeEl(buf.join('\n')));
+        into.appendChild(codeEl(buf.join('\n'), m[2]));
         continue;
       }
 
