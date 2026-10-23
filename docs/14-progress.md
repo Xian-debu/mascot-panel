@@ -710,3 +710,15 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 坑：①`renderMessages` 的「编辑中不重绘」闸门必须能被 `refreshMessages(force)` 绕过，否则一次误点编辑就让所有刷新停摆；②编辑框会被 `.msg.collapsed .body` 裁成一条线；③两字按钮在窄气泡里会竖排，图标化后消失；④合并/摘要里的 `**粗体**` 必须有渲染，否则满屏星号；⑤改 web 资源后必须 deploy + venv `--force-reinstall`（venv 是拷贝安装），否则 site-packages 里还是旧 JS。
 - 未做：总结不可取消、合并/总结/删除没有撤销、选区条窄窗换行。
 
+### M38 文本渲染 + B3 输入区（2026-10-23，用户 m01564）
+
+- 由来：用户指出面板里 DeepSeek 回复的 Markdown/LaTeX 全是裸文本；B3 要求输入框自适应、草稿落盘、IME 安全。详见 `docs/52-markdown-katex.md`、`docs/53-b3-composer.md`。
+- 改法：
+  - 内置 KaTeX 0.16.11（`web/vendor/katex`），`runtime.load_panel_html()` 组装时把 CSS 的 `url(fonts/*.woff2)` 换成 base64 data URI 内联（面板是字符串喂 WebView，相对路径取不到字体）；新增 `open_url()` 桥，链接交系统浏览器。
+  - 新 `web/js/markdown.js`（自写解析器）：块级标题/列表/引用/分隔线/表格/围栏代码/整块公式，行内公式四种定界符/粗斜体/删除线/行内代码/链接；DOM 手搭，不用 innerHTML。
+  - `chat.js` 的 `buildBody` 改为走渲染器，**删掉按源码行数自动折叠**（渲染后行数对不上会吞段落），折叠交给操作条落盘的 `collapsed`。
+  - 草稿：localStorage 在 `about:blank` 源下不持久 → 改落 `<状态目录>/draft.txt`，新增 `draft()`/`save_draft()` 桥，输入 400ms 防抖、发送即清；输入框按 `scrollHeight` 自适应 1–4 行；Enter 发送 / Shift+Enter 换行，`compositionstart/end` + `ev.isComposing` 双闸门保护中文输入法。
+- 验收（真机，`MASCOT_STATE_DIR=C:/Users/Public/mascot-b3state`）：斯托克斯定理那段标题/行间积分/行内向量全部排版；列表/表格/引用/围栏代码+复制/链接点开正常；真实提问的流式回复里列表与公式逐字渲染；4 行草稿撑满输入框；草稿重启回填、发送后 `draft.txt` 消失。
+- 坑：①转义判断若排在公式前面，\(V\) 会被当成转义括号；②KaTeX display 模式不能包 div（会拆段落），一律 span + CSS `display:block`；③未闭合的 `$$…` 曾吞掉整条消息，现回退成段落；④面板内导航会把 UI 顶掉，链接必须走 `open_url`。
+- 未做：代码块高亮、表格横向滚动条样式、LaTeX 出错时的降级提示。
+
