@@ -10,6 +10,10 @@
   let flashText = '';
   let lastSig = '';
   let lastSnapshot = null;
+  let query = '';
+  let results = null;
+  let seq = 0;
+  let timer = 0;
 
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
@@ -33,8 +37,13 @@
 
   function paintHint(snap) {
     const hint = $('drawer-hint');
-    const rows = (snap && snap.sessions) || [];
-    hint.textContent = Date.now() < flashUntil ? flashText : rows.length + ' 个会话';
+    if (Date.now() < flashUntil) { hint.textContent = flashText; return; }
+    const total = ((snap && snap.sessions) || []).length;
+    if (query) {
+      hint.textContent = results ? results.length + ' 个结果 / 共 ' + total + ' 个' : '搜索中…';
+      return;
+    }
+    hint.textContent = total + ' 个会话';
   }
 
   function rowEl(row, isCurrent) {
@@ -72,7 +81,8 @@
     const bits = [];
     if (row.count) bits.push(row.count + ' 条');
     if (row.updated_at) bits.push(when(row.updated_at));
-    if (row.preview) bits.push(row.preview);
+    if (row.snippet) bits.push(row.snippet);
+    else if (row.preview) bits.push(row.preview);
     meta.textContent = bits.join(' · ') || '空会话';
     main.appendChild(title);
     main.appendChild(meta);
@@ -161,6 +171,12 @@
       drawer.setAttribute('hidden', '');
       editingId = null;
       confirmingId = null;
+      if (query || results) {
+        query = '';
+        results = null;
+        const box = $('sess-q');
+        if (box) box.value = '';
+      }
     }
     $('sess-toggle').classList.toggle('open', open);
     repaint();
@@ -176,23 +192,57 @@
     paintHint(snap);
     if (!open) return;
 
-    const sig = current + '|' + (editingId || '') + '|' + (confirmingId || '') + '|' +
-      rows.map(function (r) {
-        return [r.id, r.title, r.count, r.updated_at, r.preview].join('~');
+    const shown = results || rows;
+    const sig = current + '|' + query + '|' + (editingId || '') + '|' + (confirmingId || '') + '|' +
+      shown.map(function (r) {
+        return [r.id, r.title, r.count, r.updated_at, r.preview, r.snippet || ''].join('~');
       }).join(',');
     if (sig === lastSig) return;
     lastSig = sig;
 
     const list = $('sess-list');
     list.textContent = '';
-    rows.forEach(function (row) { list.appendChild(rowEl(row, row.id === current)); });
+    shown.forEach(function (row) { list.appendChild(rowEl(row, row.id === current)); });
+    if (!shown.length && query) {
+      const empty = document.createElement('li');
+      empty.className = 'sess-empty';
+      empty.textContent = '没有匹配「' + query + '」的会话';
+      list.appendChild(empty);
+    }
   };
+
+  function runSearch() {
+    const mine = ++seq;
+    if (!query) { results = null; repaint(); return; }
+    M.api.searchSessions(query).then(function (res) {
+      if (mine !== seq) return;
+      results = (res && res.results) || [];
+      repaint();
+    }, function () {
+      if (mine !== seq) return;
+      results = [];
+      repaint();
+    });
+  }
 
   M.initSessions = function () {
     $('sess-toggle').addEventListener('click', function (ev) {
       ev.stopPropagation();
       toggle();
     });
+    const box = $('sess-q');
+    if (box) {
+      box.addEventListener('click', function (ev) { ev.stopPropagation(); });
+      box.addEventListener('input', function () {
+        query = box.value.trim();
+        window.clearTimeout(timer);
+        timer = window.setTimeout(runSearch, 140);
+      });
+      box.addEventListener('keydown', function (ev) {
+        ev.stopPropagation();
+        if (ev.key === 'Escape') { box.value = ''; query = ''; results = null; repaint(); }
+      });
+    }
     $('new-sess').addEventListener('click', function (ev) {
       ev.stopPropagation();
       M.api.newSession().then(function (res) {

@@ -499,6 +499,10 @@ class JsApi:
     def delete_session(self, sid: str) -> dict[str, Any]:
         return self._rt.delete_session(sid)
 
+    # 搜索（C1）：标题或正文命中，返回抽屉行格式
+    def search_sessions(self, query: str) -> dict[str, Any]:
+        return self._rt.search_sessions(query)
+
     # 消息操作（B2）：冻结/折叠/编辑/换版本/上移下移/合并/批量冻结
     def freeze_message(self, msg_id: str) -> dict[str, Any]:
         return self._rt.freeze_message(msg_id)
@@ -849,6 +853,11 @@ class Runtime:
             self._store.delete(sid, time.time())
         self._persist_sessions()
         return {"ok": True}
+
+    def search_sessions(self, query: str) -> dict[str, Any]:
+        """只读搜索：标题或消息正文命中，结果按最近更新排序。"""
+        with self._lock:
+            return {"ok": True, "results": self._store.search(query)}
 
     # ---- 消息操作（B2） -----------------------------------------------------
     # 全部按 msg_id 定位；改完立刻落盘（面板下一次快照就能看到新状态）

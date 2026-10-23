@@ -30,6 +30,8 @@
     switchSession: function (sid) { return M.hasBridge() ? window.pywebview.api.switch_session(sid) : Promise.resolve(null); },
     renameSession: function (sid, title) { return M.hasBridge() ? window.pywebview.api.rename_session(sid, title) : Promise.resolve(null); },
     deleteSession: function (sid) { return M.hasBridge() ? window.pywebview.api.delete_session(sid) : Promise.resolve(null); },
+    /* 搜索（C1）：标题或正文命中 */
+    searchSessions: function (q) { return M.hasBridge() ? window.pywebview.api.search_sessions(q) : Promise.resolve(null); },
     /* 消息操作（B2）：全部按 msg_id 定位 */
     freezeMessage: function (id) { return M.hasBridge() ? window.pywebview.api.freeze_message(id) : Promise.resolve(null); },
     bulkFreeze: function (ids, frozen) { return M.hasBridge() ? window.pywebview.api.bulk_freeze(ids, frozen) : Promise.resolve(null); },

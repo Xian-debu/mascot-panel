@@ -88,6 +88,33 @@ class SessionStore:
         rows.sort(key=lambda item: item[0], reverse=True)
         return [row for _, row in rows]
 
+    # ---- 搜索 -------------------------------------------------------------
+
+    def search(self, query: str, limit: int = 50) -> list[dict[str, object]]:
+        """按关键词找会话：标题或任意消息正文命中即算，返回抽屉行格式（带 snippet）。"""
+        q = " ".join((query or "").split()).lower()
+        if not q:
+            return self.summaries()
+        hits: list[dict[str, object]] = []
+        current = self.current_id
+        for s in self.sessions:
+            snippet = ""
+            in_title = q in (s.title or "").lower()
+            for m in s.messages:
+                text = m.text or ""
+                pos = text.lower().find(q)
+                if pos >= 0:
+                    snippet = _excerpt(text, pos, len(q))
+                    break
+            if not in_title and not snippet:
+                continue
+            row = s.summary(current=s.sid == current)
+            if snippet:
+                row["snippet"] = snippet
+            hits.append(row)
+        hits.sort(key=lambda r: float(r.get("updated_at") or 0.0), reverse=True)
+        return hits[: max(1, limit)]
+
     # ---- 写入 -------------------------------------------------------------
 
     def create(self, now: float, title: str = "") -> Session:
@@ -352,3 +379,14 @@ def dump_store(store: SessionStore) -> str:
         ensure_ascii=False,
         indent=2,
     )
+
+def _excerpt(text: str, pos: int, length: int) -> str:
+    """命中处前后各取一段（压平换行），够抽屉一行显示。"""
+    start = max(0, pos - 18)
+    end = min(len(text), pos + length + 32)
+    body = " ".join(text[start:end].split())
+    if start > 0:
+        body = "…" + body
+    if end < len(text):
+        body = body + "…"
+    return body
