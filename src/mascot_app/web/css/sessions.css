@@ -1,5 +1,6 @@
 /* 会话抽屉（B1）：标题栏会话名 + 下拉列表。 */
-.sess-toggle{display:flex;align-items:center;gap:6px;max-width:150px;
+/* 标题栏多了备忘/齿轮按钮后，标题自己收窄一点，别把状态标签挤出面板 */
+.sess-toggle{display:flex;align-items:center;gap:4px;max-width:124px;min-width:0;
   background:none;border:0;padding:2px 4px;border-radius:var(--r-card);}
 .sess-toggle:hover{background:var(--card);border-color:transparent;}
 .sess-toggle .sess-title{font-size:var(--fs-13);font-weight:700;letter-spacing:.3px;

@@ -6,15 +6,17 @@ html,body{margin:0;height:100%;background:transparent;overflow:hidden;
   background:var(--bg);border:1px solid var(--border);border-radius:var(--r-panel);
   box-shadow:0 12px 32px rgba(0,0,0,.55);overflow:hidden;}
 
-.bar{display:flex;align-items:center;gap:var(--s2);padding:10px var(--s3);
+.bar{display:flex;align-items:center;gap:6px;padding:10px var(--s3);
   border-bottom:1px solid var(--border);cursor:grab;}
 .bar:active{cursor:grabbing;}
 .bar .avatar,.bar button{cursor:pointer;}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);
+.dot{width:8px;height:8px;flex:0 0 auto;border-radius:50%;background:var(--accent);
   box-shadow:0 0 8px var(--accent);}
 .grow{flex:1;}
 .chip{font-size:var(--fs-11);color:var(--text-dim);border:1px solid var(--border);
-  border-radius:var(--r-card);padding:2px 8px;background:var(--card);}
+  border-radius:var(--r-card);padding:2px 8px;background:var(--card);
+  /* 标题栏挤了备忘/齿轮按钮后，状态标签必须自己扛住不换行（否则「跟随中」竖排） */
+  flex:0 0 auto;white-space:nowrap;}
 
 .banner{display:none;margin:var(--s2) var(--s3) 0;padding:var(--s2) var(--s3);
   border-radius:var(--r-card);border:1px solid var(--amber-line);

@@ -59,6 +59,7 @@
     thaw: SVG + '<path d="M7 2v10M2.6 4.5l8.8 5M11.4 4.5l-8.8 5"/><path d="M2.5 12.5l9-11" stroke-width="1.5"/></svg>',
     version: SVG + '<path d="M11 7a4 4 0 1 1-1.2-2.9"/><path d="M11 2.8V6H7.8"/></svg>',
     select: SVG + '<rect x="2.5" y="2.5" width="9" height="9" rx="2"/><path d="M5 7l1.4 1.5L9.4 5.4"/></svg>',
+    memo: SVG + '<path d="M3.5 3.2A1.2 1.2 0 0 1 4.7 2h4.6a1.2 1.2 0 0 1 1.2 1.2v9.1l-3.5-2.2-3.5 2.2z"/></svg>',
     grip: '<svg viewBox="0 0 14 14" width="14" height="14" fill="currentColor" aria-hidden="true">'
       + '<circle cx="5" cy="4" r="1"/><circle cx="9" cy="4" r="1"/><circle cx="5" cy="7" r="1"/>'
       + '<circle cx="9" cy="7" r="1"/><circle cx="5" cy="10" r="1"/><circle cx="9" cy="10" r="1"/></svg>',
@@ -170,6 +171,24 @@
     acts.appendChild(iconBtn(msg.collapsed ? 'unfold' : 'fold',
       msg.collapsed ? '展开全文' : '折叠成一行',
       function () { call(function () { return M.api.collapseMessage(id); }); }));
+    acts.appendChild(iconBtn('memo', '存为备忘（进备忘录视图查看）', function (b) {
+      let p;
+      try { p = M.api.memoFromMessage(id); } catch (e) { p = null; }
+      if (!p || typeof p.then !== 'function') { b.classList.add('act-ok'); return; }
+      p.then(function (res) {
+        const ok = res && res.ok;
+        b.classList.add(ok ? 'act-ok' : 'act-bad');
+        b.title = ok ? '已存为备忘' : ('存为备忘失败：' + ((res && res.reason) || '未知原因'));
+        setTimeout(function () {
+          b.classList.remove('act-ok');
+          b.classList.remove('act-bad');
+          b.title = '存为备忘（进备忘录视图查看）';
+        }, 1400);
+      }, function () {
+        b.classList.add('act-bad');
+        setTimeout(function () { b.classList.remove('act-bad'); }, 1400);
+      });
+    }));
     acts.appendChild(iconBtn('edit', '编辑（旧正文留作上一版本）', function () { startEdit(id, msg.text); }));
     acts.appendChild(iconBtn(msg.frozen ? 'thaw' : 'freeze',
       msg.frozen ? '解冻：重新发给 AI' : '冻结：这条不发给 AI',
