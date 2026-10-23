@@ -5,6 +5,11 @@
 无抗锯齿。新版第一版用了渐变球，效果明显不如原版（2026-10-22 用户反馈）。
 
 纯 PIL，不碰 Win32，时间由调用方注入，所以能在 Linux 上做确定性快照。
+
+两条视觉规格见 mascot-admin/docs/18-visual-spec.md：
+- D-V1 玻璃球：表盘底色半透明（alpha≈132），边框/刻度/指针/星光保持不透明，
+  桌面文字能透出来；分层窗口本来就按 per-pixel 预乘 alpha 合成，不需要额外 API。
+- D-V2 星光在表盘轨道上（tick_r），角度连续；**不贴指针尖**，也不吸附 12 格。
 """
 
 from __future__ import annotations
@@ -45,14 +50,9 @@ def clock_angles(
     return hour_angle, min_angle, sec_angle
 
 
-def star_anchors(
-    now: time.struct_time, c: int, len_h: int, len_m: int
-) -> tuple[tuple[int, int], tuple[int, int]]:
-    """两颗星光的位置：大星在时针尖、小星在分针尖（像素网格坐标）。"""
-    hour_angle, min_angle, _ = clock_angles(now.tm_hour, now.tm_min, now.tm_sec)
-    hour_star = (round(c + len_h * math.cos(hour_angle)), round(c + len_h * math.sin(hour_angle)))
-    min_star = (round(c + len_m * math.cos(min_angle)), round(c + len_m * math.sin(min_angle)))
-    return hour_star, min_star
+# 玻璃球（D-V1）：表盘底色半透明，其余元素不透明。132 是实测折中——
+# 再低桌面文字抢走指针对比度，再高看不出"透"。
+DIAL_ALPHA = 132
 
 
 def _draw_alert_ring(
@@ -156,10 +156,20 @@ def _render_sprite(
         outline=(*p_bright, 255) if hover else (*p_cyan, 255),
         width=1,
     )
+    # 玻璃表盘（D-V1）：底色半透明，桌面内容透出来；内圈留一道亮边当玻璃内壁反光
     dr.ellipse(
         [c - (r - 3), c - (r - 3), c + (r - 3), c + (r - 3)],
-        fill=(*p_navy, 255),
+        fill=(*p_navy, DIAL_ALPHA),
     )
+    dr.ellipse(
+        [c - (r - 3), c - (r - 3), c + (r - 3), c + (r - 3)],
+        outline=(*p_bright, 110),
+        width=1,
+    )
+    # 左上角两格玻璃反光（不透明度低，避免抢指针）
+    gx, gy = c - (r - 6), c - (r - 5)
+    dr.rectangle([gx, gy, gx + 1, gy], fill=(*p_white, 120))
+    dr.rectangle([gx, gy + 1, gx, gy + 1], fill=(*p_white, 80))
 
     hour_angle, min_angle, sec_angle = clock_angles(now.tm_hour, now.tm_min, now.tm_sec)
     tick_r = r - 2
@@ -175,6 +185,17 @@ def _render_sprite(
             dr.line([x0, y0, tx, ty], fill=(*p_cyan, 240), width=1)
         else:
             dr.rectangle([tx, ty, tx, ty], fill=(*p_cyan, 170))
+
+    # 星光（D-V2）：星在表盘轨道上、角度连续 —— 代表当前"时/分"在表盘的位置，
+    # 不是指针的装饰。M6 曾吸附到 12 格（最多偏 15°，用户"位置完全不准"），
+    # M34 又误改成贴指针尖（用户"完全背离初始设计"），两版都不对。
+    for star_angle, star_color, big in (
+        (hour_angle, p_bright, True),
+        (min_angle, p_white, False),
+    ):
+        sx = round(c + tick_r * math.cos(star_angle))
+        sy = round(c + tick_r * math.sin(star_angle))
+        _draw_sparkle(dr, sx, sy, big, star_color, pulse)
 
     # 指针：时=短粗、分=中、秒=细长
     len_h = max(5, round(ball_cells * 0.42))
@@ -202,22 +223,12 @@ def _render_sprite(
         width=1,
     )
 
-    # 星光跟着指针走（M34）：以前按“最近的 5 分钟刻度”取整，分钟星最多偏
-    # 15°，用户反馈“位置完全不准”。现在大星=时针尖、小星=分针尖，连续对齐。
-    (hx_star, hy_star), (mx_star, my_star) = star_anchors(now, c, len_h, len_m)
-    _draw_sparkle(dr, hx_star, hy_star, True, p_bright, pulse)
-    _draw_sparkle(dr, mx_star, my_star, False, p_white, pulse)
-
     # 中心轴
     dr.rectangle([c - 1, c - 1, c + 1, c + 1], fill=(*p_navy, 255))
     dr.rectangle([c, c, c, c], fill=(*p_bright, 255))
 
-    # 硬 alpha 快照 + NEAREST 放大（无 AA、无软边）
-    def snap(v: int) -> int:
-        return 0 if v < 128 else 255
-
-    alpha = img.getchannel("A").point(snap)
-    img.putalpha(alpha)
+    # 无 AA、无软边：ImageDraw 本身不抗锯齿，NEAREST 放大也不插值，
+    # 所以保留绘制时的 alpha 即可（玻璃表盘需要 132 这档，不能再 snap 成 0/255）。
     return img.resize((g * cell, g * cell), Image.Resampling.NEAREST)
 
 
