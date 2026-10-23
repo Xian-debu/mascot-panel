@@ -679,3 +679,25 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 候选组合键逐个尝试：Ctrl+Alt+M 被占用 → 自动退到 Ctrl+Shift+M（本机最终生效）。
 - 坑：线程内 `from mascot_win import wt` 是错的（`wt` = `ctypes.wintypes`），ImportError 让线程静默死掉，日志空白。
 - 偏差：热键会打开面板（占屏），不是独立的迷你捕获窗，已向用户说明。
+
+
+
+### M45 采样温度（2026-10-23，用户 m03467）
+
+- 设置页「温度」0–2 滑杆，默认 1.0；聊天透传，摘要 min(温度, 0.3) 防飘。详见 docs/59-theme-ring.md。
+- 落盘 config.toml 的 temperature，改活的 provider 立即生效；重启回填。
+- 坑：设置页下拉是原生弹窗，winput 点不到选项，要键盘 down/up + enter。
+
+
+### M46 三套主题（2026-10-23，用户 m03467）
+
+- THEMES = 深空（默认，既有风格）/ 暖夜 / 浅色；tokens.py 出 theme_css()，设置页即时换肤并落盘。
+- 旧别名 --line/--card-solid/--fg/--muted/--panel 统一映射到正式 token，settings.css 去掉硬编码深色；
+  滚动条也改 token 画，暗色主题不再出现系统白条。
+- 验证：深空→浅色→暖夜即时切换，保存后重启仍是暖色；备忘视图配色同步正确。
+
+
+### M47 提示环联动（2026-10-23，用户 m03467）
+
+- 面板开着不闪，只在收成小球时亮 2.5s；颜色随状态走：正常青 / 降级琥珀 / 出错红（新增 PIXEL_RED）。
+- 验证：ctl to-ball 后 ctl send 截图到青环；坏 key 实例小球态 ctl send 得到「琥珀球 + 红环」。
