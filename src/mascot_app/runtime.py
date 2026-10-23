@@ -13,6 +13,7 @@ import json
 import logging
 import math
 import os
+import shutil
 import threading
 import time
 from dataclasses import dataclass
@@ -221,6 +222,10 @@ def save_session_store(store: SessionStore) -> None:
     path = _sessions_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists() and path.stat().st_size > 2:
+            # 上一版留一份 .bak：真出了坏写/坏解析，用户的对话还能捞回来
+            with contextlib.suppress(OSError):
+                shutil.copy2(path, path.with_suffix(".json.bak"))
         tmp = path.with_suffix(".json.tmp")
         tmp.write_text(dump_store(store), encoding="utf-8")
         tmp.replace(path)
