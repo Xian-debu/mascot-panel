@@ -683,3 +683,16 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 坑：①频闪已由用户确认消失，`pptDst=NULL` 勿回退；②半透明是「分层窗口预乘 alpha」自带能力，不需要 DWM 模糊；③**改半透明前必须先盘点所有压在球后面的绘制层**——彗尾这种原本被不透明盘面挡住的内容会立刻从玻璃里透出来。
 - 未做：面板底栏仍是撤掉状态（a8fca60）；安装版仍是 M34，等用户认可后 build+install 一次。
 
+### M36 / B1 本地多会话（2026-10-23，用户 m00413 授权开工 B）
+
+- 由来：面板只有一条时间线，想开新话题只能清空、清空就没了。B 阶段第一步 = 多会话 + 面板内会话抽屉，详见 `docs/50-sessions.md`。
+- 改法：
+  - 新 `src/mascot_core/sessions.py`（纯逻辑、无 IO）：`Session` / `SessionStore`（find / current / summaries / create / switch / rename / delete / touch / title_from）+ `parse_store` / `dump_store` / `from_history` / `auto_title` / `new_sid`；会话上限 200、标题 40 字、至少留一个会话。
+  - `runtime.py`：对话真源从 `history.json` 换成状态目录里的 `sessions.json`（原子写：临时文件 + replace）；首次启动且只有旧 `history.json` 时自动迁移成一个会话（旧文件保留当回滚保险）；`_messages` 始终指向当前会话，其余逻辑不用改；快照增 `sessions` 摘要数组 / `current_session` / `current_title`；桥接增 `new_session / switch_session / rename_session / delete_session`，**聊天进行中调用一律返回 BUSY**；`clear_history` 只清当前会话。
+  - 面板：标题栏会话名变成按钮（原渐变字保留）+ 下拉抽屉（＋新会话、会话数、每行标题/条数/相对时间/预览，当前行高亮）；行内改名（Enter 确认、Esc 取消）、两段式删除（删除 → 删除/取消）；非当前行的操作 hover 才露出。
+  - 消息渲染签名加了 session id 前缀，切换会话时强制重绘；抽屉按签名去重，1s 轮询不会打断正在编辑的改名输入框。
+- 验收（真机点击，开发副本 + `MASCOT_STATE_DIR=C:/Users/Public/mascot-b1state`）：旧 `history.json` 3 条消息 → 迁移成 1 会话且标题正确；＋新会话 → 2 个会话且 current 切走；空会话发一句话 → 标题自动变；改名「会话甲」→ 落盘；点另一行 → 界面整体切换且抽屉收起；删除确认 → 剩 1 个会话、current 不变；杀进程重启 → 会话/标题/消息/current 全部原样。
+- 坑：①`summaries` 排序键写 `s.sid != current_id` 会先把当前会话排最前再被 `[-200:]` 裁掉，必须是 `==`；②全仓 `ruff format src` 会重排 15 个无关文件，只 format 改动的文件；③面板 `WS_EX_NOACTIVATE`，脚本点击前必须 `wwin focus`，hover 才出现的按钮要先 `winput move`。
+- 未做：会话搜索、删除回收站、抽屉分页（现全列、超出滚动）。
+
+
