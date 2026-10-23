@@ -172,6 +172,34 @@ class DeepSeekProvider:
             msg_id=f"ds-{int(time.time() * 1000)}",
         )
 
+    def complete(self, system: str, user: str) -> str:
+        """一次性补全（非流式）：给「总结选中消息」用，不污染会话上下文。"""
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "stream": False,
+            "temperature": 0.3,
+            "max_tokens": 900,
+        }
+        req = urllib.request.Request(
+            f"{self.base_url}/chat/completions",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers=self._headers(),
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:  # noqa: S310
+            obj = json.loads(resp.read().decode("utf-8", "replace"))
+        choices = obj.get("choices") or []
+        if not choices:
+            raise RuntimeError("DeepSeek 返回空补全")
+        content = str((choices[0].get("message") or {}).get("content") or "").strip()
+        if not content:
+            raise RuntimeError("DeepSeek 返回空摘要")
+        return content
+
     def stop(self) -> None:
         return None
 

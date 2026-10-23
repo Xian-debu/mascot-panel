@@ -231,8 +231,24 @@ def save_session_store(store: SessionStore) -> None:
 TOKENS_PLACEHOLDER = "/*__TOKENS__*/"
 CSS_PLACEHOLDER = "/*__CSS__*/"
 JS_PLACEHOLDER = "//__JS__"
-CSS_MODULES = ("base.css", "stream.css", "composer.css", "states.css", "sessions.css")
-JS_MODULES = ("state.js", "clock.js", "ui.js", "chat.js", "composer.js", "sessions.js", "main.js")
+CSS_MODULES = (
+    "base.css",
+    "stream.css",
+    "messages.css",
+    "composer.css",
+    "states.css",
+    "sessions.css",
+)
+JS_MODULES = (
+    "state.js",
+    "clock.js",
+    "ui.js",
+    "chat.js",
+    "msgops.js",
+    "composer.js",
+    "sessions.js",
+    "main.js",
+)
 
 
 def _pkg_text(rel: str) -> str:
@@ -331,6 +347,12 @@ class JsApi:
     def merge_messages(self, ids: list[str]) -> dict[str, Any]:
         return self._rt.merge_messages(ids)
 
+    def summarize(self, ids: list[str]) -> dict[str, Any]:
+        return self._rt.summarize(ids)
+
+    def reorder(self, msg_id: str, index: int) -> dict[str, Any]:
+        return self._rt.reorder(msg_id, index)
+
 
 # 托盘菜单命令 id（只在进程内使用，不进协议）
 CMD_TO_PANEL = 1001
@@ -413,6 +435,8 @@ class Runtime:
         self._send_queue: list[str] = []
         self._stream_text = ""
         self._stream_active = False
+        # 总结选中消息是一次后台补全：期间禁止切换/重复触发（B2）
+        self._summarizing = False
         self._cancel = threading.Event()
         flags = load_flags()
         self._paused = bool(flags.get("paused", False))
@@ -457,6 +481,7 @@ class Runtime:
                 "error": self._error,
                 "provider_detail": self._provider_detail,
                 "sending": self._sending,
+                "summarizing": self._summarizing,
                 "streaming": {"active": self._stream_active, "text": self._stream_text},
                 "paused": self._paused,
                 "orbit_paused": self._orbit_paused,
@@ -647,6 +672,19 @@ class Runtime:
         self._persist_sessions()
         return {"ok": True}
 
+    def reorder(self, msg_id: str, index: int) -> dict[str, Any]:
+        """拖动排序：把消息放到第 index 位。"""
+        try:
+            at = int(index)
+        except (TypeError, ValueError):
+            return {"ok": False, "reason": "BAD_INDEX"}
+        with self._lock:
+            changed = msgops.move_to(self._messages, msg_id, at)
+        if not changed:
+            return {"ok": False, "reason": "NO_MOVE"}
+        self._persist_sessions()
+        return {"ok": True}
+
     def merge_messages(self, ids: list[str]) -> dict[str, Any]:
         with self._lock:
             index = msgops.merge_messages(self._messages, list(ids or []))
@@ -654,6 +692,71 @@ class Runtime:
             return {"ok": False, "reason": "NEED_TWO"}
         self._persist_sessions()
         return {"ok": True, "index": index}
+
+    SUMMARY_SYSTEM = (
+        "你是对话摘要助手。用中文把用户给的消息压缩成一段摘要，"
+        "保留关键事实、结论与待办，去掉寒暄和重复。不要加评论，不要用 Markdown 标题。"
+    )
+
+    def summarize(self, ids: list[str]) -> dict[str, Any]:
+        """把选中消息交给模型总结，再用一条摘要消息替换它们（后台线程跑）。"""
+        if self._chat_busy() or self._summarizing:
+            return {"ok": False, "reason": "BUSY"}
+        wanted = {str(i) for i in (ids or [])}
+        with self._lock:
+            picked = [m for m in self._messages if m.msg_id in wanted]
+        if len(picked) < 2:
+            return {"ok": False, "reason": "NEED_TWO"}
+        self._summarizing = True
+        threading.Thread(
+            target=self._summarize_worker, args=(picked,), name="mascot-summary", daemon=True
+        ).start()
+        return {"ok": True, "queued": True}
+
+    def _summarize_worker(self, picked: list[Message]) -> None:
+        try:
+            body = "\n\n".join(
+                ("我：" if m.role == "user" else "天选姬：") + m.text for m in picked
+            )
+            text = self._summarize_text(body)
+            with self._lock:
+                wanted = {m.msg_id for m in picked}
+                idxs = [i for i, m in enumerate(self._messages) if m.msg_id in wanted]
+                if not idxs:
+                    return
+                first = min(idxs)
+                merged = Message(
+                    role="assistant",
+                    text=f"**摘要（{len(idxs)} 条）：**\n\n{text}",
+                    ts=time.time(),
+                    msg_id=f"sum-{time.time_ns()}",
+                )
+                kept = [m for i, m in enumerate(self._messages) if i not in set(idxs)]
+                at = min(first, len(kept))
+                kept.insert(at, merged)
+                self._messages[:] = kept
+            self._error = ""
+            self._persist_sessions()
+        except Exception as exc:  # noqa: BLE001 - 总结失败不该拖垮面板
+            with self._lock:
+                self._error = f"总结失败：{exc}"
+            log.warning("summarize_failed", extra={"detail": str(exc)})
+        finally:
+            self._summarizing = False
+
+    def _summarize_text(self, body: str) -> str:
+        complete = getattr(self.provider, "complete", None)
+        if callable(complete):
+            return str(complete(self.SUMMARY_SYSTEM, f"请总结以下对话：\n\n{body}")).strip()
+        # 没有模型能力（离线/null provider）时退化为摘录，不让按钮点了没反应
+        lines = []
+        for line in body.splitlines():
+            line = line.strip()
+            if line and line not in lines:
+                lines.append(line[:120])
+        if not lines:
+            raise RuntimeError("没有可总结的内容")
+        return "（未连接模型，以下为摘录）\n" + "\n".join(lines[:12])
 
     def clear_history(self) -> None:
         """清空当前会话的对话（下一次写盘即落定），其它会话不受影响。
