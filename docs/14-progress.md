@@ -642,3 +642,13 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 坑：`chat.js` 重绘签名漏了 `streaming.active`，失败后「思考中」占位永不消失。
 - 未做：删除回收站、代码块语法高亮、离线队列。
 
+
+### M41 会话回收站（C4）（2026-10-23，用户 m02527）
+
+- 由来：删会话此前不可逆，而 10-23 那次数据丢失事故说明"删掉就没了"风险太高。详见 `docs/56-trash.md`。
+- 新 `mascot_core/trash.py`（纯逻辑）：`Trash` / `TrashItem`，`add/restore/purge/summaries`，`parse_trash/dump_trash`；上限 30 条。
+- 数据分家：`sessions.json` 仍是当前会话唯一真源，删掉的会话连同消息落到 `<状态目录>/trash.json`（原子写）。
+- runtime：`delete_session` 先入回收站；新增 `list_trash/restore_session/purge_session` 桥；快照加 `trash_count`。
+- 面板：抽屉头部「回收站」按钮切换视图；行内「恢复 / 删除（两段式彻底删除）」；恢复后自动切回列表并选中。
+- 验收（真机）：删会话落 `trash.json`（含完整消息）→ 回收站列表 → 恢复后消息完好且 current 切过去 → 彻底删除后文件清空、显示"回收站是空的"→ 删最后一个会话自动补空会话 → 重启后回收站内容仍在。
+
