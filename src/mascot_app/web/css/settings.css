@@ -13,10 +13,10 @@
   padding: 0;
   background: transparent;
   border: 0;
-  color: var(--text-muted, #8b9aa8);
+  color: var(--text-muted);
   cursor: pointer;
 }
-.gear:hover { color: var(--accent, #6ee7f0); background: rgba(110, 231, 240, 0.08); }
+.gear:hover { color: var(--accent); background: var(--accent-soft); }
 
 .settings-mask {
   position: absolute;
@@ -32,12 +32,12 @@
 .settings-card {
   width: calc(100% - 32px);
   max-width: 340px;
-  background: #0d151c;
-  border: 1px solid rgba(110, 231, 240, 0.18);
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 14px;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
-  color: var(--fg, #dbe6ee);
+  color: var(--text);
   font-size: 12px;
 }
 .settings-head {
@@ -51,41 +51,41 @@
 .settings-x {
   border: 0;
   background: transparent;
-  color: var(--muted, #8b9aa8);
+  color: var(--text-dim);
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
 }
-.settings-x:hover { color: var(--accent, #6ee7f0); }
+.settings-x:hover { color: var(--accent); }
 .settings-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.settings-label { flex: 0 0 62px; color: var(--muted, #8b9aa8); }
+.settings-label { flex: 0 0 62px; color: var(--text-dim); }
 .settings-row select,
 .settings-row input {
   flex: 1 1 auto;
   min-width: 0;
-  background: #091016;
-  color: var(--fg, #dbe6ee);
-  border: 1px solid rgba(110, 231, 240, 0.22);
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
   border-radius: 7px;
   padding: 6px 8px;
   font-size: 12px;
   outline: none;
 }
 .settings-row select:focus,
-.settings-row input:focus { border-color: var(--accent, #6ee7f0); }
-.settings-hint { color: var(--muted, #8b9aa8); line-height: 1.5; margin: 2px 0 10px; }
-.settings-hint.bad { color: #ff9c9c; }
+.settings-row input:focus { border-color: var(--accent); }
+.settings-hint { color: var(--text-dim); line-height: 1.5; margin: 2px 0 10px; }
+.settings-hint.bad { color: var(--red); }
 .settings-actions { display: flex; justify-content: flex-end; }
 .settings-actions .primary {
   border: 0;
   border-radius: 8px;
   padding: 6px 16px;
-  background: rgba(110, 231, 240, 0.16);
-  color: var(--accent, #6ee7f0);
+  background: var(--accent-soft);
+  color: var(--accent);
   cursor: pointer;
   font-size: 12px;
 }
-.settings-actions .primary:hover { background: rgba(110, 231, 240, 0.26); }
+.settings-actions .primary:hover { border-color: var(--accent-line); }
 
 /* 温度滑杆：与输入框同高，右侧读数固定宽度，避免拖动时整行跳动 */
 .settings-row input[type="range"] {
@@ -95,12 +95,15 @@
   padding: 0;
   border: 0;
   background: transparent;
-  accent-color: var(--accent, #56d4dd);
+  accent-color: var(--accent);
   cursor: pointer;
 }
 .settings-val {
   flex: 0 0 30px;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  color: var(--text-dim, #8b949e);
+  color: var(--text-dim);
 }
+
+/* 主题下拉与输入框同款 */
+.settings-row select { appearance: none; }

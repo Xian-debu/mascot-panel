@@ -23,7 +23,7 @@
     toPanel: function () { return M.hasBridge() ? window.pywebview.api.to_panel() : Promise.resolve(null); },
     openUrl: function (url) { return M.hasBridge() ? window.pywebview.api.open_url(url) : Promise.resolve(null); },
     getSettings: function () { return M.hasBridge() ? window.pywebview.api.get_settings() : Promise.resolve(null); },
-    saveSettings: function (model, key, temperature) { return M.hasBridge() ? window.pywebview.api.save_settings(model, key, temperature) : Promise.resolve(null); },
+    saveSettings: function (model, key, temperature, theme) { return M.hasBridge() ? window.pywebview.api.save_settings(model, key, temperature, theme) : Promise.resolve(null); },
     draft: function () { return M.hasBridge() ? window.pywebview.api.draft() : Promise.resolve({ text: '' }); },
     saveDraft: function (text) { return M.hasBridge() ? window.pywebview.api.save_draft(text) : Promise.resolve(null); },
     newSession: function () { return M.hasBridge() ? window.pywebview.api.new_session() : Promise.resolve(null); },

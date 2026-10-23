@@ -11,6 +11,32 @@
     hint.classList.toggle('bad', !!bad);
   }
 
+  // 换肤：把 Python 算好的变量表刷到 :root，整套颜色即时变（不用重启面板）
+  let themeVars = {};
+  function applyTheme(id) {
+    const vars = themeVars[id];
+    if (!vars) return;
+    const root = document.documentElement;
+    Object.keys(vars).forEach(function (name) {
+      root.style.setProperty('--' + name, vars[name]);
+    });
+  }
+
+  function fillThemes(res) {
+    const sel = $('set-theme');
+    if (!sel) return;
+    themeVars = res.theme_vars || {};
+    sel.innerHTML = '';
+    (res.themes || []).forEach(function (item) {
+      const opt = document.createElement('option');
+      opt.value = item.id;
+      opt.textContent = item.label;
+      sel.appendChild(opt);
+    });
+    sel.value = res.theme || 'space';
+    applyTheme(sel.value);
+  }
+
   function paintTemp(value) {
     const label = $('set-temp-val');
     if (label) label.textContent = Number(value).toFixed(1);
@@ -30,6 +56,7 @@
       sel.appendChild(opt);
     }
     sel.value = res.model;
+    fillThemes(res);
     const temp = $('set-temp');
     if (temp) {
       const t = typeof res.temperature === 'number' ? res.temperature : 1;
@@ -60,6 +87,11 @@
     if (temp) {
       temp.addEventListener('input', function () { paintTemp(temp.value); });
     }
+    const theme = $('set-theme');
+    if (theme) {
+      // 选了就预览，不用等保存；保存只是把这一项落盘
+      theme.addEventListener('change', function () { applyTheme(theme.value); });
+    }
     mask.addEventListener('click', function (ev) {
       if (ev.target === mask) close();
     });
@@ -72,7 +104,9 @@
       setHint('保存中…');
       const tempInput = $('set-temp');
       const temperature = tempInput ? Number(tempInput.value) : null;
-      M.api.saveSettings(model, key, temperature).then(function (res) {
+      const themeInput = $('set-theme');
+      const theme = themeInput ? themeInput.value : null;
+      M.api.saveSettings(model, key, temperature, theme).then(function (res) {
         if (!res || res.ok === false) {
           const why = res && res.reason;
           setHint(why === 'BAD_KEY' ? 'key 太短，请检查' : '保存失败：' + (why || '未知原因'), true);

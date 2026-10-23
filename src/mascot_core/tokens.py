@@ -58,6 +58,50 @@ PIXEL_AMBER: dict[str, str] = {
 
 
 # 由主色派生出的半透明变体：CSS 里的描边/底色不再手写 rgba，改颜色只改 COLORS。
+# 三套配色：深空是既有风格（默认），暖夜偏暖的暗色，浅色给白天用。
+# 每套必须给全 11 个键——CSS 里所有颜色都从这里派生，缺一个就会掉回硬编码深色。
+THEMES: dict[str, dict[str, str]] = {
+    "space": COLORS,
+    "warm": {
+        "bg": "#14100c",
+        "card": "#1f1813",
+        "border": "#3a2d24",
+        "text": "#f2e8dc",
+        "text-dim": "#b09b88",
+        "text-muted": "#6b5a4b",
+        "accent": "#e8a04f",
+        "amber": "#f0c060",
+        "red": "#ff7b72",
+        "green": "#7ee0a0",
+        "violet": "#c9a2ff",
+    },
+    "light": {
+        "bg": "#f6f8fa",
+        "card": "#ffffff",
+        "border": "#d0d7de",
+        "text": "#1f2328",
+        "text-dim": "#57606a",
+        "text-muted": "#8c959f",
+        "accent": "#0e8a9a",
+        "amber": "#9a6700",
+        "red": "#cf222e",
+        "green": "#1a7f37",
+        "violet": "#8250df",
+    },
+}
+
+THEME_LABELS: dict[str, str] = {"space": "深空", "warm": "暖夜", "light": "浅色"}
+
+# 面板里沿用旧别名（memos.css / messages.css / settings.css 早先写下的 --line、--card-solid…），
+# 这里统一映射到正式 token，免得三套配色时旧别名掉回硬编码深色。
+ALIAS_VARS: dict[str, str] = {
+    "line": "border",
+    "card-solid": "card",
+    "panel": "card",
+    "fg": "text",
+    "muted": "text-dim",
+}
+
 ALPHA_VARS: dict[str, tuple[str, float]] = {
     "accent-soft": ("accent", 0.14),
     "accent-line": ("accent", 0.50),
@@ -74,16 +118,37 @@ def hex_to_rgb(value: str) -> tuple[int, int, int]:
     return tuple(int(v[i : i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
 
 
-def rgba(name: str, alpha: float) -> str:
+def rgba(name: str, alpha: float, theme: str = "space") -> str:
     """把 token 颜色转成 CSS rgba()，供描边/半透明底使用。"""
-    r, g, b = hex_to_rgb(COLORS[name])
+    r, g, b = hex_to_rgb(theme_colors(theme)[name])
     return f"rgba({r},{g},{b},{alpha:g})"
 
 
-def css_variables() -> str:
+def theme_colors(theme: str = "space") -> dict[str, str]:
+    return THEMES.get(theme, COLORS)
+
+
+def theme_options() -> list[dict[str, str]]:
+    """给设置页下拉用：[{"id": "space", "label": "深空"}, ...]"""
+    return [{"id": key, "label": THEME_LABELS.get(key, key)} for key in THEMES]
+
+
+def theme_css(theme: str = "space") -> dict[str, str]:
+    """一套配色展开成 {css 变量名: 值}（不含字号/间距），供 JS 即时换肤。"""
+    colors = theme_colors(theme)
+    out = dict(colors)
+    out.update({name: colors[target] for name, target in ALIAS_VARS.items()})
+    out.update({name: rgba(color, alpha, theme) for name, (color, alpha) in ALPHA_VARS.items()})
+    return out
+
+
+def css_variables(theme: str = "space") -> str:
     """生成 :root { --bg: ...; } 供 web/ 直接注入。"""
-    lines = [f"  --{name}: {value};" for name, value in COLORS.items()]
-    lines += [f"  --{name}: {rgba(color, alpha)};" for name, (color, alpha) in ALPHA_VARS.items()]
+    lines = [f"  --{name}: {value};" for name, value in theme_colors(theme).items()]
+    lines += [f"  --{name}: {theme_colors(theme)[target]};" for name, target in ALIAS_VARS.items()]
+    lines += [
+        f"  --{name}: {rgba(color, alpha, theme)};" for name, (color, alpha) in ALPHA_VARS.items()
+    ]
     lines += [f"  --{name}: {value}px;" for name, value in SIZES.items()]
     lines += [f"  --{name}: {value}px;" for name, value in SPACING.items()]
     lines += [f"  --{name}: {value}px;" for name, value in RADIUS.items()]

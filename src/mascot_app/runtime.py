@@ -53,7 +53,7 @@ from mascot_core.state import (
     State,
     Transition,
 )
-from mascot_core.tokens import css_variables
+from mascot_core.tokens import THEMES, css_variables, theme_css, theme_options
 
 log = logging.getLogger(__name__)
 
@@ -565,7 +565,7 @@ def katex_js() -> str:
     return _pkg_text("web/vendor/katex/katex.min.js")
 
 
-def load_panel_html() -> str:
+def load_panel_html(theme: str = "space") -> str:
     """把面板外壳、CSS 模块、JS 模块与设计 token 合成一张自包含 HTML。
 
     面板拆成多文件开发（好读好改），运行时合成单文件给 WebView（不依赖本地路径）。
@@ -574,7 +574,7 @@ def load_panel_html() -> str:
     css = "\n".join(_pkg_text(f"web/css/{name}") for name in CSS_MODULES)
     js = "\n".join(_pkg_text(f"web/js/{name}") for name in JS_MODULES)
     return (
-        html.replace(TOKENS_PLACEHOLDER, css_variables())
+        html.replace(TOKENS_PLACEHOLDER, css_variables(theme))
         .replace(VENDOR_CSS_PLACEHOLDER, katex_css())
         .replace(CSS_PLACEHOLDER, css)
         .replace(JS_PLACEHOLDER, katex_js() + "\n" + js)
@@ -625,9 +625,13 @@ class JsApi:
         return self._rt.get_settings()
 
     def save_settings(
-        self, model: str, key: str, temperature: float | None = None
+        self,
+        model: str,
+        key: str,
+        temperature: float | None = None,
+        theme: str | None = None,
     ) -> dict[str, Any]:
-        return self._rt.save_settings(model, key, temperature)
+        return self._rt.save_settings(model, key, temperature, theme)
 
     # 草稿（B3）：输入框内容落盘，重启/切会话都不丢
     def draft(self) -> dict[str, Any]:
@@ -790,7 +794,7 @@ class Runtime:
             name for name in Settings.model_fields if f"MASCOT_{name.upper()}" in os.environ
         }
         self.provider = provider
-        self.panel_html = panel_html or load_panel_html()
+        self.panel_html = panel_html or load_panel_html(self.settings.theme)
 
         self._machine = Machine()
         self._events: list[Event] = []
@@ -943,12 +947,20 @@ class Runtime:
             "models": list(SETTING_MODELS),
             "has_key": bool(_env_key()),
             "temperature": round(float(temp), 2),
+            "theme": self.settings.theme,
+            "themes": theme_options(),
+            # 三套配色的变量表一次给全：换肤在 JS 里即时生效，不用重启面板
+            "theme_vars": {key: theme_css(key) for key in THEMES},
         }
 
     def save_settings(
-        self, model: str, key: str, temperature: float | None = None
+        self,
+        model: str,
+        key: str,
+        temperature: float | None = None,
+        theme: str | None = None,
     ) -> dict[str, Any]:
-        """改模型（写 config.toml，当前 provider 立即生效）与 key（写用户环境变量）。"""
+        """改模型/温度/主题（写 config.toml，当前 provider 立即生效）与 key（写用户环境变量）。"""
         new_model = str(model or "").strip()
         new_key = str(key or "").strip()
         if new_model and new_model not in SETTING_MODELS:
@@ -985,6 +997,20 @@ class Runtime:
                 self.provider.temperature = new_temp
             self.settings = self.settings.model_copy(update={"temperature": new_temp})
 
+        new_theme = self.settings.theme
+        if theme is not None:
+            if theme not in THEMES:
+                return {"ok": False, "reason": "BAD_THEME"}
+            try:
+                from mascot_core.configfile import set_config_value
+
+                set_config_value("theme", theme)
+            except (OSError, ValueError) as exc:
+                log.warning("settings: 写主题失败 %s", exc)
+                return {"ok": False, "reason": "CONFIG_WRITE_FAILED"}
+            new_theme = theme
+            self.settings = self.settings.model_copy(update={"theme": theme})
+
         if new_key and not set_user_env(KEY_ENV, new_key):
             return {"ok": False, "reason": "ENV_WRITE_FAILED"}
 
@@ -993,7 +1019,12 @@ class Runtime:
             threading.Thread(
                 target=self._poll_provider, name="mascot-settings-probe", daemon=True
             ).start()
-        return {"ok": True, "model": new_model or None, "has_key": bool(_env_key())}
+        return {
+            "ok": True,
+            "model": new_model or None,
+            "has_key": bool(_env_key()),
+            "theme": new_theme,
+        }
 
     # ---- 聊天 ---------------------------------------------------------------
 

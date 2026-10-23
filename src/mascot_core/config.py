@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     provider_timeout_s: float = Field(default=120.0, gt=0.1)
     # 采样温度：0 更严谨、2 更发散。聊天直接透传；摘要（complete）另留 0.3 上限。
     temperature: float = Field(default=1.0, ge=0.0, le=2.0)
+    # 配色：space（深空，默认）/ warm（暖夜）/ light（浅色）。未知值由运行时夹回默认。
+    theme: str = "space"
     # health 是启动路径上的串行探测，要容忍公网抖动；仍比业务超时短得多
     health_timeout_s: float = Field(default=3.0, gt=0.05, le=10.0)
     allow_offline: bool = True
@@ -104,6 +106,7 @@ HOT_FIELDS = (
     "history_limit",
     "click_window_ms",
     "temperature",
+    "theme",
 )
 
 

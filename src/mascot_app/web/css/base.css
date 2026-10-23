@@ -63,3 +63,10 @@ button:disabled{opacity:.5;cursor:default;}
 
 /* [hidden] 必须真的隐藏：面板里多处用 display:flex 的容器也要能被 hidden 关掉 */
 [hidden] { display: none !important; }
+
+/* 滚动条：默认是系统白条，暗色主题里很扎眼；三套主题统一用 token 画细条 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+::-webkit-scrollbar-corner { background: transparent; }
