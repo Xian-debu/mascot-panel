@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from mascot_app import boot
+from mascot_core import memos as memoops
 from mascot_core import sessions as msgops
 from mascot_core import trash as trashmod
 from mascot_core.click import DOUBLE, SINGLE, ClickGate
@@ -189,6 +190,11 @@ def _sessions_path() -> Path:
 def _trash_path() -> Path:
     """会话回收站：删掉的会话先放这里，可恢复。"""
     return _state_dir() / "trash.json"
+
+
+def _memos_path() -> Path:
+    """备忘录：分组 + 条目，跟会话一样是单文件真源。"""
+    return _state_dir() / "memos.json"
 
 
 def _history_path() -> Path:
@@ -403,6 +409,29 @@ def save_trash(trash: trashmod.Trash) -> None:
         tmp.replace(path)
     except OSError as exc:
         log.warning("trash: 写入失败 %s: %s", path, exc)
+
+
+def load_memos(now: float) -> memoops.MemoStore:
+    try:
+        raw = _memos_path().read_text(encoding="utf-8")
+    except OSError:
+        return memoops.MemoStore()
+    return memoops.parse_store(raw, now)
+
+
+def save_memos(store: memoops.MemoStore) -> None:
+    path = _memos_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists() and path.stat().st_size > 2:
+            backup = path.with_suffix(".json.bak")
+            with contextlib.suppress(OSError):
+                shutil.copyfile(path, backup)
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(memoops.dump_store(store), encoding="utf-8")
+        tmp.replace(path)
+    except OSError as exc:
+        log.warning("memos: 写入失败 %s: %s", path, exc)
 
 
 # ---- 设置（B3）：模型 + key -------------------------------------------
@@ -672,6 +701,37 @@ class JsApi:
     def reorder(self, msg_id: str, index: int) -> dict[str, Any]:
         return self._rt.reorder(msg_id, index)
 
+    # 备忘录（M43）
+    def memo_list(self) -> dict[str, Any]:
+        return self._rt.memo_list()
+
+    def memo_add(self, text: str, title: str = "", group: str = "") -> dict[str, Any]:
+        return self._rt.memo_add(text, title, group)
+
+    def memo_edit(self, mid: str, text: str = "", title: str = "") -> dict[str, Any]:
+        return self._rt.memo_edit(mid, text, title)
+
+    def memo_delete(self, mid: str) -> dict[str, Any]:
+        return self._rt.memo_delete(mid)
+
+    def memo_pin(self, mid: str) -> dict[str, Any]:
+        return self._rt.memo_pin(mid)
+
+    def memo_move(self, mid: str, group: str) -> dict[str, Any]:
+        return self._rt.memo_move(mid, group)
+
+    def memo_group_add(self, name: str) -> dict[str, Any]:
+        return self._rt.memo_group_add(name)
+
+    def memo_group_rename(self, gid: str, name: str) -> dict[str, Any]:
+        return self._rt.memo_group_rename(gid, name)
+
+    def memo_group_delete(self, gid: str) -> dict[str, Any]:
+        return self._rt.memo_group_delete(gid)
+
+    def memo_from_message(self, msg_id: str) -> dict[str, Any]:
+        return self._rt.memo_from_message(msg_id)
+
 
 # 托盘菜单命令 id（只在进程内使用，不进协议）
 CMD_TO_PANEL = 1001
@@ -755,6 +815,7 @@ class Runtime:
         # 先挂上本次运行前落盘的多会话数据，后端历史稍后由 _load_history 合并进当前会话
         self._store = load_session_store(time.time())
         self._trash = load_trash(time.time())
+        self._memos = load_memos(time.time())
         self._sending = False
         self._send_queue: list[str] = []
         self._stream_text = ""
@@ -821,6 +882,7 @@ class Runtime:
                 "current_session": self._store.current_id,
                 "current_title": self._store.current().title,
                 "trash_count": len(self._trash.items),
+                "memo_count": len(self._memos.memos),
                 "settings": {
                     "fps": self.settings.fps,
                     "history_limit": self.settings.history_limit,
@@ -1164,6 +1226,98 @@ class Runtime:
             return {"ok": False, "reason": "NO_MOVE"}
         self._persist_sessions()
         return {"ok": True}
+
+    # ---- 备忘录（M43）：分组 + 条目 ---------------------------------------
+
+    def memo_list(self) -> dict[str, Any]:
+        """面板一次拿全量：条目上限 500，按分组分好再给，JS 只负责画和筛。"""
+        with self._lock:
+            data = self._memos.grouped()
+            groups = [{"id": g.gid, "name": g.name} for g in self._memos.groups]
+        return {"ok": True, "groups": groups, "sections": data["sections"], "total": data["total"]}
+
+    def memo_add(self, text: str, title: str = "", group: str = "") -> dict[str, Any]:
+        with self._lock:
+            memo = self._memos.add(text, title=title, group=group, now=time.time())
+        if memo is None:
+            return {"ok": False, "reason": "EMPTY"}
+        save_memos(self._memos)
+        return {"ok": True, "id": memo.mid}
+
+    def memo_edit(self, mid: str, text: str = "", title: str = "") -> dict[str, Any]:
+        """空串表示「这一项不改」，只有传了内容才覆盖。"""
+        with self._lock:
+            changed = self._memos.edit(
+                mid,
+                text=text if text else None,
+                title=title if title else None,
+                now=time.time(),
+            )
+        if not changed:
+            return {"ok": False, "reason": "NO_CHANGE"}
+        save_memos(self._memos)
+        return {"ok": True}
+
+    def memo_delete(self, mid: str) -> dict[str, Any]:
+        with self._lock:
+            gone = self._memos.delete(mid)
+        if not gone:
+            return {"ok": False, "reason": "NOT_FOUND"}
+        save_memos(self._memos)
+        return {"ok": True}
+
+    def memo_pin(self, mid: str) -> dict[str, Any]:
+        with self._lock:
+            pinned = self._memos.toggle_pin(mid)
+        if pinned is None:
+            return {"ok": False, "reason": "NOT_FOUND"}
+        save_memos(self._memos)
+        return {"ok": True, "pinned": pinned}
+
+    def memo_move(self, mid: str, group: str) -> dict[str, Any]:
+        with self._lock:
+            moved = self._memos.move(mid, group)
+        if not moved:
+            return {"ok": False, "reason": "NO_MOVE"}
+        save_memos(self._memos)
+        return {"ok": True}
+
+    def memo_group_add(self, name: str) -> dict[str, Any]:
+        with self._lock:
+            group = self._memos.add_group(name, time.time())
+        if group is None:
+            return {"ok": False, "reason": "BAD_NAME"}
+        save_memos(self._memos)
+        return {"ok": True, "id": group.gid, "name": group.name}
+
+    def memo_group_rename(self, gid: str, name: str) -> dict[str, Any]:
+        with self._lock:
+            ok = self._memos.rename_group(gid, name)
+        if not ok:
+            return {"ok": False, "reason": "BAD_NAME"}
+        save_memos(self._memos)
+        return {"ok": True}
+
+    def memo_group_delete(self, gid: str) -> dict[str, Any]:
+        with self._lock:
+            ok = self._memos.delete_group(gid)
+        if not ok:
+            return {"ok": False, "reason": "NOT_FOUND"}
+        save_memos(self._memos)
+        return {"ok": True}
+
+    def memo_from_message(self, msg_id: str) -> dict[str, Any]:
+        """把聊天里的一条消息存成备忘（未分组，标题取首行）。"""
+        with self._lock:
+            idx = msgops.find_index(self._messages, msg_id)
+            if idx is None:
+                return {"ok": False, "reason": "NOT_FOUND"}
+            text = self._messages[idx].text
+            memo = self._memos.add(text, now=time.time())
+        if memo is None:
+            return {"ok": False, "reason": "EMPTY"}
+        save_memos(self._memos)
+        return {"ok": True, "id": memo.mid, "title": memo.title or memoops.auto_title(memo.text)}
 
     def merge_messages(self, ids: list[str]) -> dict[str, Any]:
         with self._lock:
