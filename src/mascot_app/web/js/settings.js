@@ -11,6 +11,11 @@
     hint.classList.toggle('bad', !!bad);
   }
 
+  function paintTemp(value) {
+    const label = $('set-temp-val');
+    if (label) label.textContent = Number(value).toFixed(1);
+  }
+
   function fill(res) {
     if (!res || res.ok === false) {
       setHint('读取设置失败', true);
@@ -25,6 +30,12 @@
       sel.appendChild(opt);
     }
     sel.value = res.model;
+    const temp = $('set-temp');
+    if (temp) {
+      const t = typeof res.temperature === 'number' ? res.temperature : 1;
+      temp.value = String(t);
+      paintTemp(t);
+    }
     const key = $('set-key');
     key.value = '';
     key.placeholder = res.has_key ? '已设置（留空不修改）' : '未设置';
@@ -45,6 +56,10 @@
       }
     });
     $('settings-close').addEventListener('click', close);
+    const temp = $('set-temp');
+    if (temp) {
+      temp.addEventListener('input', function () { paintTemp(temp.value); });
+    }
     mask.addEventListener('click', function (ev) {
       if (ev.target === mask) close();
     });
@@ -55,7 +70,9 @@
       const model = $('set-model').value;
       const key = $('set-key').value.trim();
       setHint('保存中…');
-      M.api.saveSettings(model, key).then(function (res) {
+      const tempInput = $('set-temp');
+      const temperature = tempInput ? Number(tempInput.value) : null;
+      M.api.saveSettings(model, key, temperature).then(function (res) {
         if (!res || res.ok === false) {
           const why = res && res.reason;
           setHint(why === 'BAD_KEY' ? 'key 太短，请检查' : '保存失败：' + (why || '未知原因'), true);

@@ -86,3 +86,21 @@
   font-size: 12px;
 }
 .settings-actions .primary:hover { background: rgba(110, 231, 240, 0.26); }
+
+/* 温度滑杆：与输入框同高，右侧读数固定宽度，避免拖动时整行跳动 */
+.settings-row input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--accent, #56d4dd);
+  cursor: pointer;
+}
+.settings-val {
+  flex: 0 0 30px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim, #8b949e);
+}

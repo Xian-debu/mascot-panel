@@ -35,6 +35,7 @@ class DeepSeekProvider:
         model: str = DEFAULT_MODEL,
         timeout_s: float = 60.0,
         health_timeout_s: float | None = None,
+        temperature: float = 1.0,
     ) -> None:
         base = (base_url or "").strip().rstrip("/")
         # 用户把 .bashrc 的 DEEPSEEK_BASE_URL 指到 /anthropic 时也能用：只认域名，路径固定走 OpenAI 兼容端点
@@ -44,6 +45,8 @@ class DeepSeekProvider:
         self.model = model or DEFAULT_MODEL
         self.timeout_s = timeout_s
         self.health_timeout_s = health_timeout_s if health_timeout_s is not None else 3.0
+        # 0–2，越界夹回：这是用户能从设置页拨的值，不该把请求搞成 400
+        self.temperature = max(0.0, min(2.0, float(temperature)))
         self._convo: deque[dict[str, str]] = deque(maxlen=CONTEXT_TURNS * 2)
 
     # ---- key ---------------------------------------------------------
@@ -132,6 +135,7 @@ class DeepSeekProvider:
             "model": self.model,
             "messages": [*self._convo, {"role": "user", "content": text}],
             "stream": True,
+            "temperature": self.temperature,
         }
         req = urllib.request.Request(
             f"{self.base_url}/chat/completions",
@@ -181,7 +185,8 @@ class DeepSeekProvider:
                 {"role": "user", "content": user},
             ],
             "stream": False,
-            "temperature": 0.3,
+            # 摘要要稳：用户把温度拉到 2 也不让总结飘起来
+            "temperature": min(self.temperature, 0.3),
             "max_tokens": 900,
         }
         req = urllib.request.Request(

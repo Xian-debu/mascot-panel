@@ -29,6 +29,7 @@ def make_provider(settings: Settings) -> ChatProvider:
             model=settings.provider_model,
             timeout_s=settings.provider_timeout_s,
             health_timeout_s=settings.health_timeout_s,
+            temperature=settings.temperature,
         )
     if name == "legacy":
         return LegacyProvider(

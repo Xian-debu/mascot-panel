@@ -624,8 +624,10 @@ class JsApi:
     def get_settings(self) -> dict[str, Any]:
         return self._rt.get_settings()
 
-    def save_settings(self, model: str, key: str) -> dict[str, Any]:
-        return self._rt.save_settings(model, key)
+    def save_settings(
+        self, model: str, key: str, temperature: float | None = None
+    ) -> dict[str, Any]:
+        return self._rt.save_settings(model, key, temperature)
 
     # 草稿（B3）：输入框内容落盘，重启/切会话都不丢
     def draft(self) -> dict[str, Any]:
@@ -934,14 +936,18 @@ class Runtime:
 
     def get_settings(self) -> dict[str, Any]:
         model = str(getattr(self.provider, "model", "") or self.settings.provider_model)
+        temp = getattr(self.provider, "temperature", self.settings.temperature)
         return {
             "ok": True,
             "model": model,
             "models": list(SETTING_MODELS),
             "has_key": bool(_env_key()),
+            "temperature": round(float(temp), 2),
         }
 
-    def save_settings(self, model: str, key: str) -> dict[str, Any]:
+    def save_settings(
+        self, model: str, key: str, temperature: float | None = None
+    ) -> dict[str, Any]:
         """改模型（写 config.toml，当前 provider 立即生效）与 key（写用户环境变量）。"""
         new_model = str(model or "").strip()
         new_key = str(key or "").strip()
@@ -960,6 +966,24 @@ class Runtime:
                 return {"ok": False, "reason": "CONFIG_WRITE_FAILED"}
             if hasattr(self.provider, "model"):
                 self.provider.model = new_model
+
+        new_temp: float | None = None
+        if temperature is not None:
+            try:
+                new_temp = max(0.0, min(2.0, round(float(temperature), 1)))
+            except (TypeError, ValueError):
+                return {"ok": False, "reason": "BAD_TEMPERATURE"}
+            try:
+                from mascot_core.configfile import set_config_value
+
+                set_config_value("temperature", str(new_temp))
+            except (OSError, ValueError) as exc:
+                log.warning("settings: 写温度失败 %s", exc)
+                return {"ok": False, "reason": "CONFIG_WRITE_FAILED"}
+            # 热字段：直接改在活的 provider / settings 上，下一条消息就按新温度发
+            if hasattr(self.provider, "temperature"):
+                self.provider.temperature = new_temp
+            self.settings = self.settings.model_copy(update={"temperature": new_temp})
 
         if new_key and not set_user_env(KEY_ENV, new_key):
             return {"ok": False, "reason": "ENV_WRITE_FAILED"}
