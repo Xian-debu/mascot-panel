@@ -32,6 +32,8 @@
     deleteSession: function (sid) { return M.hasBridge() ? window.pywebview.api.delete_session(sid) : Promise.resolve(null); },
     /* 搜索（C1）：标题或正文命中 */
     searchSessions: function (q) { return M.hasBridge() ? window.pywebview.api.search_sessions(q) : Promise.resolve(null); },
+    /* 重试（C3）：重发上一条失败的消息 */
+    retrySend: function () { return M.hasBridge() ? window.pywebview.api.retry_send() : Promise.resolve(null); },
     /* 导出（C2）：当前会话 → Markdown */
     exportSession: function (sid) { return M.hasBridge() ? window.pywebview.api.export_session(sid || '') : Promise.resolve(null); },
     /* 消息操作（B2）：全部按 msg_id 定位 */

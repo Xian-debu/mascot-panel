@@ -22,7 +22,28 @@
       banner = '出错了：' + snap.error;
     }
     const el = $('banner');
-    el.textContent = banner;
+    const sig = banner + '|' + (snap.retry_available ? '1' : '0');
+    if (el.dataset.sig !== sig) {
+      el.dataset.sig = sig;
+      el.textContent = '';
+      if (banner) {
+        const text = document.createElement('span');
+        text.className = 'banner-text';
+        text.textContent = banner;
+        el.appendChild(text);
+      }
+      if (banner && snap.retry_available) {
+        const again = document.createElement('button');
+        again.className = 'banner-retry';
+        again.textContent = '重试';
+        again.title = '把刚才那条消息再发一次';
+        again.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          M.api.retrySend();
+        });
+        el.appendChild(again);
+      }
+    }
     el.className = 'banner' + (banner ? ' show' : '');
 
     /* M34：底部提示行已撤掉（用户反馈没有存在理由）；收进小球只走标题栏头像。 */

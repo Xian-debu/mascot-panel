@@ -525,6 +525,10 @@ class JsApi:
     def stop(self) -> dict[str, Any]:
         return {"ok": self._rt.cancel_send()}
 
+    # 重试（C3）：上一条失败的用户消息重发一次
+    def retry_send(self) -> dict[str, Any]:
+        return self._rt.retry_send()
+
     # 会话抽屉（B1）：新建/切换/重命名/删除后 JS 继续轮询快照拿新列表
     def new_session(self) -> dict[str, Any]:
         return self._rt.new_session()
@@ -649,6 +653,8 @@ class Runtime:
         self._reason = "START"
         self._degraded = False
         self._error: str = ""
+        self._failed_text: str = ""
+        self._failed_msg_id: str = ""
         self._provider_detail: str = ""
         # 先挂上本次运行前落盘的多会话数据，后端历史稍后由 _load_history 合并进当前会话
         self._store = load_session_store(time.time())
@@ -701,6 +707,7 @@ class Runtime:
                 "uptime_s": round(time.monotonic() - self._started, 1),
                 "error": self._error,
                 "provider_detail": self._provider_detail,
+                "retry_available": bool(self._failed_text),
                 "sending": self._sending,
                 "summarizing": self._summarizing,
                 "streaming": {"active": self._stream_active, "text": self._stream_text},
@@ -818,6 +825,23 @@ class Runtime:
             active = self._stream_active
             self._cancel.set()
         return active
+
+    def retry_send(self) -> dict[str, Any]:
+        """重发上一条失败的用户消息：先把它从会话里摘掉，避免重试后出现两条一样的。"""
+        with self._lock:
+            text = self._failed_text
+            if not text:
+                return {"ok": False, "reason": "NOTHING"}
+            msg_id = self._failed_msg_id
+            idx = msgops.find_index(self._messages, msg_id) if msg_id else None
+            if idx is not None:
+                del self._messages[idx]
+            self._failed_text = ""
+            self._failed_msg_id = ""
+            self._error = ""
+            self._send_queue.append(text)
+        self._persist_sessions()
+        return {"ok": True}
 
     def _on_delta(self, piece: str) -> None:
         """provider 每收到一个分片调一次。持锁追加，取消时抛 SendCancelled 中止读取。"""
@@ -1081,14 +1105,13 @@ class Runtime:
             with self._lock:
                 # 第一条用户消息顺手当会话标题（用户改过名就不再覆盖）
                 self._store.title_from(text)
-                self._messages.append(
-                    Message(
-                        role="user",
-                        text=text,
-                        ts=time.time(),
-                        msg_id=f"local-{self._store.current_id}-{time.time_ns()}",
-                    )
+                sent = Message(
+                    role="user",
+                    text=text,
+                    ts=time.time(),
+                    msg_id=f"local-{self._store.current_id}-{time.time_ns()}",
                 )
+                self._messages.append(sent)
                 self._sending = True
                 self._stream_text = ""
                 self._stream_active = True
@@ -1104,6 +1127,8 @@ class Runtime:
                     self._mark_alert()
                 self._error = ""
                 self._provider_detail = ""
+                self._failed_text = ""
+                self._failed_msg_id = ""
             except SendCancelled:
                 # 用户点了停止：把已收到的部分文本落成一条消息，标注被截断
                 with self._lock:
@@ -1123,6 +1148,9 @@ class Runtime:
             except Exception as exc:
                 self._error = str(exc)
                 self._provider_detail = str(exc)
+                # 记住这条没发出去的用户消息（原文 + id），面板上给「重试」
+                self._failed_text = text
+                self._failed_msg_id = sent.msg_id
                 self.post(Event.PROVIDER_DOWN)
             finally:
                 with self._lock:

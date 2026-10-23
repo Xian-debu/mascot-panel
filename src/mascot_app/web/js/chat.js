@@ -71,7 +71,8 @@
     const signature = (sessionId || '') + '#' + list.map(function (m) {
       return (m.id || '') + ':' + hash(m.text) + ':' + (m.pending ? 1 : 0) + ':' +
         (m.frozen ? 1 : 0) + ':' + (m.collapsed ? 1 : 0) + ':' + (m.versions || 0);
-    }).join('|') + '#' + live.length + ':' + hash(live) + '#' + ((M.selectionSig && M.selectionSig()) || '');
+    }).join('|') + '#' + (streaming && streaming.active ? 1 : 0) + ':' + live.length + ':' +
+      hash(live) + '#' + ((M.selectionSig && M.selectionSig()) || '');
     if (signature === lastSignature) return;
     lastSignature = signature;
 
