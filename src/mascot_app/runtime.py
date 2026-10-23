@@ -16,6 +16,7 @@ import math
 import os
 import re
 import shutil
+import sys
 import threading
 import time
 import webbrowser
@@ -267,6 +268,74 @@ def save_session_store(store: SessionStore) -> None:
         log.warning("sessions: 写入失败 %s: %s", path, exc)
 
 
+# ---- 设置（B3）：模型 + key -------------------------------------------
+
+SETTING_MODELS = ("deepseek-chat", "deepseek-reasoner")
+KEY_ENV = "DEEPSEEK_AUTH_TOKEN"
+
+
+def _env_key() -> str:
+    """当前进程能否拿到 key（env 或 HKCU\\Environment）。"""
+    for name in (KEY_ENV, "DEEPSEEK_API_KEY", "MASCOT_DEEPSEEK_API_KEY"):
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    if sys.platform != "win32":
+        return ""
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as handle:
+            for name in (KEY_ENV, "DEEPSEEK_API_KEY", "MASCOT_DEEPSEEK_API_KEY"):
+                try:
+                    value, _ = winreg.QueryValueEx(handle, name)
+                except FileNotFoundError:
+                    continue
+                if str(value).strip():
+                    return str(value).strip()
+    except OSError:
+        pass
+    return ""
+
+
+def set_user_env(name: str, value: str) -> bool:
+    """写 Windows 用户级环境变量（等价 setx），并广播 WM_SETTINGCHANGE。
+
+    key 只走环境变量，不写 config.toml、不进日志 —— 和 setx 是同一份真源，
+    面板里录入只是替用户省掉开终端敲 setx 的步骤。
+    """
+    if sys.platform != "win32":
+        os.environ[name] = value
+        return True
+    try:
+        import ctypes
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_SET_VALUE
+        ) as handle:
+            winreg.SetValueEx(handle, name, 0, winreg.REG_SZ, value)
+    except OSError as exc:
+        log.warning("settings: 写用户环境变量失败 %s: %s", name, exc)
+        return False
+    os.environ[name] = value
+    with contextlib.suppress(Exception):  # 广播失败不影响本次进程内生效
+        hwnd_broadcast = 0xFFFF
+        wm_settingchange = 0x001A
+        smto_abortifhung = 0x0002
+        result = ctypes.c_ulong()
+        ctypes.windll.user32.SendMessageTimeoutW(  # type: ignore[attr-defined]
+            hwnd_broadcast,
+            wm_settingchange,
+            0,
+            "Environment",
+            smto_abortifhung,
+            3000,
+            ctypes.byref(result),
+        )
+    return True
+
+
 TOKENS_PLACEHOLDER = "/*__TOKENS__*/"
 VENDOR_CSS_PLACEHOLDER = "/*__VENDOR_CSS__*/"
 CSS_PLACEHOLDER = "/*__CSS__*/"
@@ -279,6 +348,7 @@ CSS_MODULES = (
     "composer.css",
     "states.css",
     "sessions.css",
+    "settings.css",
 )
 JS_MODULES = (
     "markdown.js",
@@ -289,6 +359,7 @@ JS_MODULES = (
     "msgops.js",
     "composer.js",
     "sessions.js",
+    "settings.js",
     "main.js",
 )
 
@@ -378,6 +449,13 @@ class JsApi:
 
     def open_url(self, url: str) -> dict[str, Any]:
         return self._rt.open_url(url)
+
+    # 设置（B3）：模型 + key。key 只写用户环境变量，不落配置文件
+    def get_settings(self) -> dict[str, Any]:
+        return self._rt.get_settings()
+
+    def save_settings(self, model: str, key: str) -> dict[str, Any]:
+        return self._rt.save_settings(model, key)
 
     # 草稿（B3）：输入框内容落盘，重启/切会话都不丢
     def draft(self) -> dict[str, Any]:
@@ -618,6 +696,47 @@ class Runtime:
             log.warning("open_url 失败 %s: %s", target, exc)
             return {"ok": False, "reason": "OPEN_FAILED"}
         return {"ok": True}
+
+    # ---- 设置（B3）：模型 + key ---------------------------------------------
+
+    def get_settings(self) -> dict[str, Any]:
+        model = str(getattr(self.provider, "model", "") or self.settings.provider_model)
+        return {
+            "ok": True,
+            "model": model,
+            "models": list(SETTING_MODELS),
+            "has_key": bool(_env_key()),
+        }
+
+    def save_settings(self, model: str, key: str) -> dict[str, Any]:
+        """改模型（写 config.toml，当前 provider 立即生效）与 key（写用户环境变量）。"""
+        new_model = str(model or "").strip()
+        new_key = str(key or "").strip()
+        if new_model and new_model not in SETTING_MODELS:
+            return {"ok": False, "reason": "BAD_MODEL"}
+        if new_key and len(new_key) < 10:
+            return {"ok": False, "reason": "BAD_KEY"}
+
+        if new_model:
+            try:
+                from mascot_core.configfile import set_config_value
+
+                set_config_value("provider_model", new_model)
+            except (OSError, ValueError) as exc:
+                log.warning("settings: 写 config.toml 失败 %s", exc)
+                return {"ok": False, "reason": "CONFIG_WRITE_FAILED"}
+            if hasattr(self.provider, "model"):
+                self.provider.model = new_model
+
+        if new_key and not set_user_env(KEY_ENV, new_key):
+            return {"ok": False, "reason": "ENV_WRITE_FAILED"}
+
+        if new_key or new_model:
+            # 立刻探一次，面板状态灯/在线提示不用等下一轮轮询
+            threading.Thread(
+                target=self._poll_provider, name="mascot-settings-probe", daemon=True
+            ).start()
+        return {"ok": True, "model": new_model or None, "has_key": bool(_env_key())}
 
     # ---- 聊天 ---------------------------------------------------------------
 

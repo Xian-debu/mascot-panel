@@ -22,6 +22,8 @@
     toBall: function () { return M.hasBridge() ? window.pywebview.api.to_ball() : Promise.resolve(null); },
     toPanel: function () { return M.hasBridge() ? window.pywebview.api.to_panel() : Promise.resolve(null); },
     openUrl: function (url) { return M.hasBridge() ? window.pywebview.api.open_url(url) : Promise.resolve(null); },
+    getSettings: function () { return M.hasBridge() ? window.pywebview.api.get_settings() : Promise.resolve(null); },
+    saveSettings: function (model, key) { return M.hasBridge() ? window.pywebview.api.save_settings(model, key) : Promise.resolve(null); },
     draft: function () { return M.hasBridge() ? window.pywebview.api.draft() : Promise.resolve({ text: '' }); },
     saveDraft: function (text) { return M.hasBridge() ? window.pywebview.api.save_draft(text) : Promise.resolve(null); },
     newSession: function () { return M.hasBridge() ? window.pywebview.api.new_session() : Promise.resolve(null); },

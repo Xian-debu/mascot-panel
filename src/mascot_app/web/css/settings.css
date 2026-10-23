@@ -1,0 +1,88 @@
+/* 设置浮层：面板内一层遮罩，不额外开窗口 */
+.gear {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin-right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  /* button 默认有 6px 10px 的内边距，22px 宽一减就成 0，SVG 会被压成一条缝 */
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted, #8b9aa8);
+  cursor: pointer;
+}
+.gear:hover { color: var(--accent, #6ee7f0); background: rgba(110, 231, 240, 0.08); }
+
+.settings-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 8, 12, 0.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+}
+.settings-mask[hidden] { display: none; }
+
+.settings-card {
+  width: calc(100% - 32px);
+  max-width: 340px;
+  background: #0d151c;
+  border: 1px solid rgba(110, 231, 240, 0.18);
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  color: var(--fg, #dbe6ee);
+  font-size: 12px;
+}
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.settings-x {
+  border: 0;
+  background: transparent;
+  color: var(--muted, #8b9aa8);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.settings-x:hover { color: var(--accent, #6ee7f0); }
+.settings-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.settings-label { flex: 0 0 62px; color: var(--muted, #8b9aa8); }
+.settings-row select,
+.settings-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: #091016;
+  color: var(--fg, #dbe6ee);
+  border: 1px solid rgba(110, 231, 240, 0.22);
+  border-radius: 7px;
+  padding: 6px 8px;
+  font-size: 12px;
+  outline: none;
+}
+.settings-row select:focus,
+.settings-row input:focus { border-color: var(--accent, #6ee7f0); }
+.settings-hint { color: var(--muted, #8b9aa8); line-height: 1.5; margin: 2px 0 10px; }
+.settings-hint.bad { color: #ff9c9c; }
+.settings-actions { display: flex; justify-content: flex-end; }
+.settings-actions .primary {
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 16px;
+  background: rgba(110, 231, 240, 0.16);
+  color: var(--accent, #6ee7f0);
+  cursor: pointer;
+  font-size: 12px;
+}
+.settings-actions .primary:hover { background: rgba(110, 231, 240, 0.26); }

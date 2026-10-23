@@ -18,6 +18,9 @@
       <span class="caret">▾</span>
     </button>
     <span class="grow"></span>
+    <button class="gear" id="gear" title="设置（模型 / API Key）">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
     <span class="dot" id="dot" title="状态灯"></span>
     <span class="chip" id="state">idle</span>
   </header>
@@ -39,6 +42,30 @@
   <div class="composer">
     <textarea id="input" rows="1" placeholder="说点什么…"></textarea>
     <button id="send" class="primary" title="发送">发送</button>
+  </div>
+
+  <div class="settings-mask" id="settings-mask" hidden>
+    <div class="settings-card">
+      <div class="settings-head">
+        <span>设置</span>
+        <button class="settings-x" id="settings-close" title="关闭">×</button>
+      </div>
+      <label class="settings-row">
+        <span class="settings-label">模型</span>
+        <select id="set-model">
+          <option value="deepseek-chat">deepseek-chat · 快</option>
+          <option value="deepseek-reasoner">deepseek-reasoner · 推理</option>
+        </select>
+      </label>
+      <label class="settings-row">
+        <span class="settings-label">API Key</span>
+        <input id="set-key" type="password" autocomplete="off" spellcheck="false" placeholder="未设置" />
+      </label>
+      <div class="settings-hint" id="set-hint">key 只写进 Windows 用户环境变量（等价 setx），不存配置文件、不进日志。留空表示不修改。</div>
+      <div class="settings-actions">
+        <button id="set-save" class="primary">保存</button>
+      </div>
+    </div>
   </div>
 
 </div>
