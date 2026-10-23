@@ -230,8 +230,8 @@ def save_session_store(store: SessionStore) -> None:
 TOKENS_PLACEHOLDER = "/*__TOKENS__*/"
 CSS_PLACEHOLDER = "/*__CSS__*/"
 JS_PLACEHOLDER = "//__JS__"
-CSS_MODULES = ("base.css", "stream.css", "composer.css", "states.css")
-JS_MODULES = ("state.js", "clock.js", "ui.js", "chat.js", "composer.js", "main.js")
+CSS_MODULES = ("base.css", "stream.css", "composer.css", "states.css", "sessions.css")
+JS_MODULES = ("state.js", "clock.js", "ui.js", "chat.js", "composer.js", "sessions.js", "main.js")
 
 
 def _pkg_text(rel: str) -> str:

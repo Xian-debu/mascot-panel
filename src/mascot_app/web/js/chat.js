@@ -89,10 +89,10 @@
     return el;
   }
 
-  M.renderMessages = function (messages, streaming) {
+  M.renderMessages = function (messages, streaming, sessionId) {
     const list = messages || [];
     const live = streaming && streaming.active ? String(streaming.text || '') : '';
-    const signature = list.map(function (m) { return (m.id || '') + ':' + (m.text || '').length + ':' + (m.pending ? 1 : 0); }).join('|') + '#' + live.length;
+    const signature = (sessionId || '') + '#' + list.map(function (m) { return (m.id || '') + ':' + (m.text || '').length + ':' + (m.pending ? 1 : 0); }).join('|') + '#' + live.length;
     if (signature === lastSignature) return;
     lastSignature = signature;
 

@@ -12,11 +12,22 @@
 <div class="panel">
   <header class="bar pywebview-drag-region" title="拖动可移动面板">
     <span class="avatar" id="avatar" title="点这里收进小球"></span>
-    <span class="title">天选姬</span>
+    <button class="sess-toggle" id="sess-toggle" title="切换会话">
+      <span class="sess-title" id="sess-title">新的对话</span>
+      <span class="caret">▾</span>
+    </button>
     <span class="grow"></span>
     <span class="dot" id="dot" title="状态灯"></span>
     <span class="chip" id="state">idle</span>
   </header>
+
+  <div class="drawer" id="drawer" hidden>
+    <div class="drawer-head">
+      <button class="new-sess" id="new-sess" title="新建一个空会话">＋ 新会话</button>
+      <span class="drawer-hint" id="drawer-hint"></span>
+    </div>
+    <ul class="sess-list" id="sess-list"></ul>
+  </div>
 
   <div class="banner" id="banner"></div>
 

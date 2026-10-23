@@ -8,7 +8,8 @@
   function apply(snap) {
     M.store.snapshot = snap;
     M.paintShell(snap);
-    M.renderMessages(snap.messages || [], snap.streaming);
+    M.renderMessages(snap.messages || [], snap.streaming, snap.current_session || '');
+    M.renderSessions(snap);
     setSending(!!snap.sending);
   }
 
@@ -31,6 +32,7 @@
     M.store.streaming = { active: false, text: '' };
 
     M.mountClock($('avatar'), function () { M.api.toBall(); });
+    M.initSessions();
 
     M.startPolling(apply);
   }

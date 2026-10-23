@@ -12,9 +12,6 @@ html,body{margin:0;height:100%;background:transparent;overflow:hidden;
 .bar .avatar,.bar button{cursor:pointer;}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);
   box-shadow:0 0 8px var(--accent);}
-.title{font-size:var(--fs-13);font-weight:700;letter-spacing:.3px;
-  background:linear-gradient(90deg,var(--accent),var(--violet));
-  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
 .grow{flex:1;}
 .chip{font-size:var(--fs-11);color:var(--text-dim);border:1px solid var(--border);
   border-radius:var(--r-card);padding:2px 8px;background:var(--card);}
