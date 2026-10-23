@@ -30,13 +30,8 @@ def _as_message(item: object) -> Message | None:
     return Message(role=role, text=text, ts=ts, msg_id=mid)
 
 
-def parse_history(raw: str) -> list[Message]:
-    """读坏的记录只跳过坏条目，绝不让启动失败。"""
-    try:
-        data = json.loads(raw)
-    except (ValueError, TypeError):
-        return []
-    items = data.get("messages") if isinstance(data, dict) else data
+def parse_messages(items: object) -> list[Message]:
+    """把任意 list 里像消息的条目转成 Message，其余跳过（迁移/多会话共用）。"""
     if not isinstance(items, list):
         return []
     out: list[Message] = []
@@ -45,6 +40,16 @@ def parse_history(raw: str) -> list[Message]:
         if msg is not None:
             out.append(msg)
     return out
+
+
+def parse_history(raw: str) -> list[Message]:
+    """读坏的记录只跳过坏条目，绝不让启动失败。"""
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return []
+    items = data.get("messages") if isinstance(data, dict) else data
+    return parse_messages(items)
 
 
 def dump_history(messages: list[Message]) -> str:
