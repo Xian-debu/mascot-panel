@@ -450,6 +450,16 @@
     setView(state.view === 'memo' ? 'chat' : 'memo');
   };
   M.isMemoView = function () { return state.view === 'memo'; };
+
+  /* 全局热键 Ctrl+Alt+M 的落点（runtime.evaluate_js 调用）：切到备忘并直接开新建卡片 */
+  window.MemoQuickOpen = function () {
+    setView('memo');
+    setTimeout(function () {
+      openEditor(null, '');
+      const area = $('memo-text');
+      if (area) area.focus();
+    }, 120);
+  };
   M.renderMemos = function () {
     /* 快照轮询只用来同步「条数」徽标；列表本身按需 reload（改动后必刷） */
     const snap = M.store && M.store.snapshot;

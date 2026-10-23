@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import ctypes
 import json
 import logging
 import math
@@ -2084,6 +2085,74 @@ class Runtime:
         except Exception as exc:  # 托盘失败不该拖垮主程序
             log.warning("tray: 创建失败（%s）", exc)
             self._tray = None
+
+        self._start_hotkey()
+
+    # ---- 全局热键：Ctrl+Alt+M 快速记一条备忘（M43） ------------------------
+    def _start_hotkey(self) -> None:
+        if sys.platform != "win32":
+            return
+        try:
+            threading.Thread(target=self._hotkey_worker, name="mascot-hotkey", daemon=True).start()
+        except Exception as exc:
+            log.warning("hotkey: 线程起不来（%s）", exc)
+
+    # 候选组合键：逐个尝试，谁先注册成功用谁（避免被别的程序占用时彻底失效）
+    HOTKEY_CANDIDATES: tuple[tuple[int, int, str], ...] = (
+        (0x0001 | 0x0002, 0x4D, "Ctrl+Alt+M"),
+        (0x0002 | 0x0004, 0x4D, "Ctrl+Shift+M"),
+        (0x0001 | 0x0002, 0x4E, "Ctrl+Alt+N"),
+    )
+
+    def _hotkey_worker(self) -> None:
+        import ctypes.wintypes as wt
+
+        from mascot_win import win32
+
+        u = win32._user32
+        hotkey_id = 1
+        chosen = ""
+        for mods, vk, name in self.HOTKEY_CANDIDATES:
+            if u.RegisterHotKey(None, hotkey_id, mods, vk):
+                chosen = name
+                break
+            log.warning(
+                "hotkey: %s 注册失败（err=%s），换下一个候选", name, ctypes.get_last_error()
+            )
+        if not chosen:
+            log.warning("hotkey: 所有候选组合键都注册失败，快捷记备忘只能用面板/托盘入口")
+            return
+        log.info("hotkey: %s 已注册（快速记备忘）", chosen)
+        msg = wt.MSG()
+        try:
+            while u.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+                if msg.message == 0x0312:  # WM_HOTKEY
+                    try:
+                        self.open_quick_memo()
+                    except Exception:
+                        log.warning("hotkey: 打开快速备忘失败", exc_info=True)
+        finally:
+            u.UnregisterHotKey(None, hotkey_id)
+
+    def open_quick_memo(self) -> dict[str, Any]:
+        # 热键/托盘入口：把面板叫出来并直接落到「新建备忘」编辑器。
+        # 说明：这一步会把面板显示出来（备忘录视图），不是独立的迷你窗口；
+        # 但省掉了「打开面板 -> 点备忘 -> 点新备忘」三步，粘上就 Ctrl+Enter 存。
+        log.info("quick_memo: 打开新建备忘")
+        self.post(Event.CLICK_BALL)
+        timer = threading.Timer(0.45, self._inject_quick_memo)
+        timer.daemon = True
+        timer.start()
+        return {"ok": True}
+
+    def _inject_quick_memo(self) -> None:
+        panel = self._panel
+        if panel is None:
+            return
+        try:
+            panel.evaluate_js("window.MemoQuickOpen && window.MemoQuickOpen()")
+        except Exception:
+            log.warning("quick_memo: 注入 JS 失败", exc_info=True)
 
     def _tray_tip(self) -> str:
         state = self._machine.state.value
