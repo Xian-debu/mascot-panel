@@ -287,6 +287,21 @@ def switch_version(messages: list[Message], msg_id: str) -> bool:
     return True
 
 
+def move_to(messages: list[Message], msg_id: str, index: int) -> bool:
+    """把消息拖到第 index 位（0 起，按拖完之后的顺序算）。"""
+    if not isinstance(index, int):
+        return False
+    idx = find_index(messages, msg_id)
+    if idx is None:
+        return False
+    target = max(0, min(index, len(messages) - 1))
+    if target == idx:
+        return False
+    msg = messages.pop(idx)
+    messages.insert(target, msg)
+    return True
+
+
 def move_message(messages: list[Message], msg_id: str, direction: str) -> bool:
     """上移/下移一条（direction = "up" | "down"），到头了返回 False。"""
     i = find_index(messages, msg_id)
