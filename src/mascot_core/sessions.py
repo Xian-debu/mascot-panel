@@ -112,7 +112,7 @@ class SessionStore:
             if snippet:
                 row["snippet"] = snippet
             hits.append(row)
-        hits.sort(key=lambda r: float(r.get("updated_at") or 0.0), reverse=True)
+        hits.sort(key=lambda r: _num(r.get("updated_at"), 0.0), reverse=True)
         return hits[: max(1, limit)]
 
     # ---- 写入 -------------------------------------------------------------

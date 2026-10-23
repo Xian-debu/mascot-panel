@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from importlib import resources
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from mascot_app import boot
 from mascot_core import memos as memoops
@@ -56,6 +56,17 @@ from mascot_core.state import (
 from mascot_core.tokens import RADIUS, THEMES, css_variables, theme_css, theme_options
 
 log = logging.getLogger(__name__)
+
+
+def _last_error() -> int:
+    """ctypes 的 get_last_error 只在 Windows 且 use_last_error 时存在，缺了就当 0。"""
+    get = getattr(ctypes, "get_last_error", None)
+    if get is None:
+        return 0
+    try:
+        return int(get())
+    except (OSError, ValueError):
+        return 0
 
 PANEL_TITLE = "mascot-panel"
 BALL_SIZE = 128
@@ -978,7 +989,7 @@ class Runtime:
                 log.warning("settings: 写 config.toml 失败 %s", exc)
                 return {"ok": False, "reason": "CONFIG_WRITE_FAILED"}
             if hasattr(self.provider, "model"):
-                self.provider.model = new_model
+                cast(Any, self.provider).model = new_model
 
         new_temp: float | None = None
         if temperature is not None:
@@ -995,7 +1006,7 @@ class Runtime:
                 return {"ok": False, "reason": "CONFIG_WRITE_FAILED"}
             # 热字段：直接改在活的 provider / settings 上，下一条消息就按新温度发
             if hasattr(self.provider, "temperature"):
-                self.provider.temperature = new_temp
+                cast(Any, self.provider).temperature = new_temp
             self.settings = self.settings.model_copy(update={"temperature": new_temp})
 
         new_theme = self.settings.theme
@@ -2191,7 +2202,7 @@ class Runtime:
                 chosen = name
                 break
             log.warning(
-                "hotkey: %s 注册失败（err=%s），换下一个候选", name, ctypes.get_last_error()
+                "hotkey: %s 注册失败（err=%s），换下一个候选", name, _last_error()
             )
         if not chosen:
             log.warning("hotkey: 所有候选组合键都注册失败，快捷记备忘只能用面板/托盘入口")
@@ -2399,7 +2410,7 @@ class Runtime:
         screenshot: str | None = None,
         gui: str | None = None,
     ) -> int:
-        import webview
+        import webview  # pyright: ignore[reportMissingImports]
 
         width, height = self.settings.panel_size
         self._panel = webview.create_window(
