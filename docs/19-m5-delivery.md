@@ -63,7 +63,7 @@ LOCALAPPDATA 从 Windows 环境读取（`venv/Scripts/python.exe -c "os.environ[
 - 用户级，不需要管理员权限；卸载 = 删一个值，可审计（`reg query` 可见）。
 - **默认关闭**，安装脚本必须显式 `--autostart`；`rollback.bat` 会先 `autostart off`。
 - 不接受非 exe 目标（开发态 `python -m` 会明确报错，提示用打包版或 `--exe`）。
-- 实测：`status → off`，`on` 后注册表值 = `"C:\Users\ZYX\AppData\Local\mascot\app\0.1.0\mascot.exe"`，
+- 实测：`status → off`，`on` 后注册表值 = `"C:\Users\User\AppData\Local\mascot\app\0.1.0\mascot.exe"`，
   `off` 返回 `removed: true`，再 `status → off`。
 
 ## 4. 回滚
@@ -135,8 +135,8 @@ WIN_ROOT=/mnt/c/Users/Public/mascot bash scripts/build-win.sh
 WIN_ROOT=/mnt/c/Users/Public/mascot bash scripts/install-win.sh --autostart
 
 # Windows 侧
-C:\Users\ZYX\AppData\Local\mascot\app\0.1.0\mascot.exe doctor
-C:\Users\ZYX\AppData\Local\mascot\app\0.1.0\mascot.exe          # GUI
-C:\Users\ZYX\AppData\Local\mascot\app\0.1.0\mascot.exe ctl stop
-C:\Users\ZYX\AppData\Local\mascot\rollback.bat                    # 回滚到旧版
+C:\Users\User\AppData\Local\mascot\app\0.1.0\mascot.exe doctor
+C:\Users\User\AppData\Local\mascot\app\0.1.0\mascot.exe          # GUI
+C:\Users\User\AppData\Local\mascot\app\0.1.0\mascot.exe ctl stop
+C:\Users\User\AppData\Local\mascot\rollback.bat                    # 回滚到旧版
 ```

@@ -49,13 +49,13 @@ M17 配置写回保留注释与未知键 → M18 版本目录列举/回收与真
 
 **现在能做什么**（Windows 上已装好）：
 ```
-C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe            # 双击/无参数 = GUI
-C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe doctor     # 体检
-C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe ctl status # 看状态（含 boot 分段、dnd、paused）
-C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe ctl dnd on # 免打扰：不自动弹面板
-C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe ctl stop   # 退出
-C:/Users/ZYX/AppData/Local/mascot/app/0.1.0/mascot.exe update --from <目录|zip>  # 就地升级（自动切 current.txt、回收旧目录）
-C:/Users/ZYX/AppData/Local/mascot/rollback.bat                    # 停新版、起旧版
+C:/Users/User/AppData/Local/mascot/app/0.1.0/mascot.exe            # 双击/无参数 = GUI
+C:/Users/User/AppData/Local/mascot/app/0.1.0/mascot.exe doctor     # 体检
+C:/Users/User/AppData/Local/mascot/app/0.1.0/mascot.exe ctl status # 看状态（含 boot 分段、dnd、paused）
+C:/Users/User/AppData/Local/mascot/app/0.1.0/mascot.exe ctl dnd on # 免打扰：不自动弹面板
+C:/Users/User/AppData/Local/mascot/app/0.1.0/mascot.exe ctl stop   # 退出
+C:/Users/User/AppData/Local/mascot/app/0.1.0/mascot.exe update --from <目录|zip>  # 就地升级（自动切 current.txt、回收旧目录）
+C:/Users/User/AppData/Local/mascot/rollback.bat                    # 停新版、起旧版
 ```
 右击托盘图标有：显示面板 / 收进小球 / 暂停跟随 / 免打扰 / 开机自启 / 退出；双击托盘=面板与小球互切。
 注意：**开机自启当前是关闭的**，要开：`mascot.exe autostart on`（或托盘勾选）。
@@ -137,7 +137,7 @@ uv run mascot ctl status   -> {"ok":true,"data":{"running":false,...}} exit=0
 ```
 venv/Scripts/python.exe -m mascot_app.cli doctor --offline
 -> {"ok":true,...} exit=0
-   python 3.11.9 / dependencies all present / state_dir C:\Users\ZYX\AppData\Local\mascot
+   python 3.11.9 / dependencies all present / state_dir C:\Users\User\AppData\Local\mascot
    platform Windows 10 (AMD64)
 ```
 依赖实际版本：pywebview 6.2.1、pillow 13.0.0、pydantic-settings 2.16.1、psutil 7.2.2。
@@ -448,7 +448,7 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
   点击开面板一直正常，把问题掩盖成“拖动无效但点击正常”。修法：DOWN 分支不再做命中判断。
 - 遗留：拖动无边缘吸附/双击复位；待机球无右键菜单；面板 idle 位置仍不跟随球。
 - 交付：`dist/mascot/mascot.exe`（7.7M）重建，`install-win.sh` 已装到
-  `C:/Users/ZYX/AppData/Local/mascot/app/0.1.0`（`current.txt=0.1.0`），安装版 `mascot.exe doctor` 体检通过。
+  `C:/Users/User/AppData/Local/mascot/app/0.1.0`（`current.txt=0.1.0`），安装版 `mascot.exe doctor` 体检通过。
 
 
 ### M15 聊天记录：跨重启保留 + 可清空（2026-10-22 深夜）
@@ -470,7 +470,7 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
   产品侧另修：落盘后顺手刷新 state.json，`ctl status` 才看得到新消息。
 - 遗留：历史只存文本与最近 50 条，无文件轮转；清空仅本地；后端自身历史不在范围内。
 - 交付：`dist/mascot/mascot.exe` 重建，`install-win.sh` 已装到
-  `C:/Users/ZYX/AppData/Local/mascot/app/0.1.0`（`current.txt=0.1.0`），安装版 doctor 通过。
+  `C:/Users/User/AppData/Local/mascot/app/0.1.0`（`current.txt=0.1.0`），安装版 doctor 通过。
 
 ### M16 待机球：右键菜单 + 边缘吸附 + 回到右下角（2026-10-22 深夜）
 
@@ -490,7 +490,7 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
   给选择，不能再挂 `WM_COMMAND`（会双触发）。
 - 遗留：吸附只在松手时生效（无拖动中橡皮筋）、无双击复位、面板 idle 位置仍不跟随球、菜单无图标。
 - 交付：`dist/mascot/mascot.exe` 重建（7996831 字节 / 7.7M，21:18），`install-win.sh` 已装到
-  `C:/Users/ZYX/AppData/Local/mascot/app/0.1.0`（7996831 字节，`current.txt=0.1.0`），安装版 doctor 通过。
+  `C:/Users/User/AppData/Local/mascot/app/0.1.0`（7996831 字节，`current.txt=0.1.0`），安装版 doctor 通过。
 
 ### M17 配置写回：保留注释、未知键与 [table] 段（2026-10-22 深夜）
 
@@ -508,7 +508,7 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 遗留：仍无热重载（`config set` 后需重启，CLI 返回 `restart_required: true`）；只支持扁平键；
   改写值时不保留 `1_000` 这类原写法。
 - 交付：`dist/mascot/mascot.exe` 重建，`install-win.sh` 已装到
-  `C:/Users/ZYX/AppData/Local/mascot/app/0.1.0`（`current.txt=0.1.0`），安装版 doctor 通过。
+  `C:/Users/User/AppData/Local/mascot/app/0.1.0`（`current.txt=0.1.0`），安装版 doctor 通过。
 
 ### M18 已安装版本目录：列举、回收、真回滚（2026-10-22 夜）
 

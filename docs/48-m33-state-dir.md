@@ -3,7 +3,7 @@
 日期：2026-10-23 00:30 前后。路线：`/root/mascot-admin/docs/14-product-roadmap.md` 阶段 A3。
 
 ## 为什么做
-- 用户在 `C:\Users\ZYX\AppData\Local\mascot` 里看到我验收留下的假消息与截图（`验收消息-…`、
+- 用户在 `C:\Users\User\AppData\Local\mascot` 里看到我验收留下的假消息与截图（`验收消息-…`、
   `（假后端）收到 15 个字…`、`m5-*.png`），而开发部署副本在 `C:\Users\Public\mascot`；
   「为什么有两份」的根因不是安装逻辑，而是**开发/验收跑起来会直接写用户真实状态目录**。
 - 各模块各自解析 `%LOCALAPPDATA%/mascot`（config、runtime、cli、single、logging 五处重复），
@@ -24,10 +24,10 @@
 - `MASCOT_STATE_DIR=C:\Users\Public\mascot-devstate-a3` 启动开发版：该目录出现
   `history.json` / `logs/` / `mascot.pid` / `runtime.json` / `state.json`，`state=tracking`、`provider=deepseek`、`degraded=false`。
 - `ctl status`（同一 env）正确读到该实例（pid、tracking、pet=TX Mascot）。
-- 用户目录 `C:\Users\ZYX\AppData\Local\mascot`：`history.json` 只剩 3 条真实对话
+- 用户目录 `C:\Users\User\AppData\Local\mascot`：`history.json` 只剩 3 条真实对话
   （用户「你好」+ 安装版自测「安装版测试：请用一句话介绍你自己」及其回复），验收假消息、`m5-*.png`、残留
   `state.json`/`mascot.pid` 已清；`runtime.json` 里我写入的 `panel_offset`/`panel_pos` 已清空（原文件备份在
-  `C:\Users\ZYX\AppData\Local\mascot-backup-20261023-002650`）。
+  `C:\Users\User\AppData\Local\mascot-backup-20261023-002650`）。
 - 安装版重启后 `state=tracking`、`provider=deepseek`、`degraded=false`（key 来自用户级环境变量）。
 - Linux 门禁：ruff 0 / pyright 0 / pytest **196 passed, 1 skipped**。
 
