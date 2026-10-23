@@ -89,6 +89,17 @@ EOF
 # 同时把 heredoc 留下的双反斜杠收成单反斜杠。
 sed -i -e 's/\\\\/\\/g' -e 's/$/\r/' "$LOCAL/rollback.bat"
 
+# 开始菜单项：只有安装知道当前版本路径，所以放在这里生成（卸载时删掉）
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if command -v powershell.exe >/dev/null 2>&1; then
+  powershell.exe -NoProfile -ExecutionPolicy Bypass \
+    -File "$(wslpath -w "$HERE/make-shortcut.ps1")" \
+    -Target "$LOCAL_WIN\\mascot\\app\\$VERSION\\mascot.exe" \
+    -WorkDir "$LOCAL_WIN\\mascot" 2>/dev/null | tr -d '\r' | sed 's/^/   /'
+else
+  echo "   （跳过开始菜单项：WSL 里找不到 powershell.exe）"
+fi
+
 if [ "${1:-}" = "--autostart" ]; then
   echo "== 开启开机自启"
   "$DEST/mascot.exe" autostart on --exe "$LOCAL_WIN\\mascot\\app\\$VERSION\\mascot.exe"

@@ -16,6 +16,13 @@ if [ -x "$EXE" ]; then
   "$EXE" autostart off >/dev/null 2>&1 || true
 fi
 
+# 先删开始菜单项（它指向的就是要删掉的 exe）
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if command -v powershell.exe >/dev/null 2>&1; then
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w "$HERE/make-shortcut.ps1")" \
+    -Target "$LOCAL_WIN\\mascot\\app\\$VERSION\\mascot.exe" -Remove 2>/dev/null | tr -d '\r' | sed 's/^/   /'
+fi
+
 echo "== 删除 $DEST"
 rm -rf "$DEST"
 
