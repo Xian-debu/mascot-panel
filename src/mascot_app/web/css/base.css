@@ -58,3 +58,6 @@ button:disabled{opacity:.5;cursor:default;}
   .panel{animation:none;}
   .dot.idle,.dot.working,.dot.awaiting{animation:none;}
 }
+
+/* [hidden] 必须真的隐藏：面板里多处用 display:flex 的容器也要能被 hidden 关掉 */
+[hidden] { display: none !important; }

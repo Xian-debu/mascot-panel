@@ -50,6 +50,17 @@
     mergeMessages: function (ids) { return M.hasBridge() ? window.pywebview.api.merge_messages(ids) : Promise.resolve(null); },
     summarize: function (ids) { return M.hasBridge() ? window.pywebview.api.summarize(ids) : Promise.resolve(null); },
     reorder: function (id, index) { return M.hasBridge() ? window.pywebview.api.reorder(id, index) : Promise.resolve(null); },
+    /* 备忘录（M43） */
+    listMemos: function () { return M.hasBridge() ? window.pywebview.api.memo_list() : Promise.resolve(null); },
+    memoAdd: function (text, title, group) { return M.hasBridge() ? window.pywebview.api.memo_add(text, title || '', group || '') : Promise.resolve(null); },
+    memoEdit: function (id, text, title) { return M.hasBridge() ? window.pywebview.api.memo_edit(id, text || '', title || '') : Promise.resolve(null); },
+    memoDelete: function (id) { return M.hasBridge() ? window.pywebview.api.memo_delete(id) : Promise.resolve(null); },
+    memoPin: function (id) { return M.hasBridge() ? window.pywebview.api.memo_pin(id) : Promise.resolve(null); },
+    memoMove: function (id, group) { return M.hasBridge() ? window.pywebview.api.memo_move(id, group || '') : Promise.resolve(null); },
+    memoGroupAdd: function (name) { return M.hasBridge() ? window.pywebview.api.memo_group_add(name) : Promise.resolve(null); },
+    memoGroupRename: function (id, name) { return M.hasBridge() ? window.pywebview.api.memo_group_rename(id, name) : Promise.resolve(null); },
+    memoGroupDelete: function (id) { return M.hasBridge() ? window.pywebview.api.memo_group_delete(id) : Promise.resolve(null); },
+    memoFromMessage: function (id) { return M.hasBridge() ? window.pywebview.api.memo_from_message(id) : Promise.resolve(null); },
   };
 
   /* 轮询快照：M2 定下的单向通道（Python 从不反调 JS）。 */

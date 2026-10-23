@@ -10,6 +10,7 @@
     M.paintShell(snap);
     M.renderMessages(snap.messages || [], snap.streaming, snap.current_session || '');
     M.renderSessions(snap);
+    if (M.renderMemos) M.renderMemos(snap);
     setSending(!!snap.sending);
   }
 
@@ -33,6 +34,7 @@
 
     M.mountClock($('avatar'), function () { M.api.toBall(); });
     M.initSessions();
+    if (M.initMemos) M.initMemos();
     if (M.initSettings) M.initSettings();
     if (M.initDragTail) M.initDragTail();
 

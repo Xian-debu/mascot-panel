@@ -18,6 +18,9 @@
       <span class="caret">▾</span>
     </button>
     <span class="grow"></span>
+    <button class="memo-toggle" id="memo-toggle" title="备忘录：分组记录常用文本，单击即复制">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H17l3 3v13.5A1.5 1.5 0 0 1 18.5 21h-13A1.5 1.5 0 0 1 4 19.5z"/><path d="M8 8h7M8 12h7M8 16h4"/></svg>
+    </button>
     <button class="gear" id="gear" title="设置（模型 / API Key）">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
     </button>
@@ -37,6 +40,34 @@
   </div>
 
   <div class="banner" id="banner"></div>
+
+  <div class="memoview" id="memoview" hidden>
+    <div class="memo-head">
+      <button class="memo-new" id="memo-new" title="新建一条备忘（Ctrl+Enter 保存）">＋ 新备忘</button>
+      <button class="memo-grp" id="memo-newgroup" title="新建一个分组">＋ 分组</button>
+      <span class="memo-hint" id="memo-hint"></span>
+    </div>
+    <input class="sess-search memo-search" id="memo-q" type="search" placeholder="搜索备忘（标题或正文）…" autocomplete="off" spellcheck="false" />
+    <div class="memo-list" id="memo-list"></div>
+  </div>
+
+  <div class="memo-mask" id="memo-mask" hidden>
+    <div class="memo-card">
+      <div class="memo-card-head">
+        <span id="memo-card-title">新备忘</span>
+        <button id="memo-x" title="关闭">×</button>
+      </div>
+      <input id="memo-title" type="text" maxlength="60" placeholder="标题（留空则取正文第一行）" autocomplete="off" spellcheck="false" />
+      <textarea id="memo-text" rows="6" placeholder="正文…（Ctrl+Enter 保存，Esc 取消）" spellcheck="false"></textarea>
+      <div class="memo-row-line">
+        <span>分组</span>
+        <select id="memo-group"></select>
+      </div>
+      <div class="memo-actions">
+        <button class="primary" id="memo-save">保存</button>
+      </div>
+    </div>
+  </div>
 
   <main class="stream" id="stream" aria-live="polite"></main>
 

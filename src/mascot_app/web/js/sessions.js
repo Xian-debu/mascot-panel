@@ -288,7 +288,10 @@
     lastSnapshot = snap;
     const rows = snap.sessions || [];
     const current = snap.current_session || '';
-    $('sess-title').textContent = snap.current_title || '新的对话';
+    /* 备忘视图下标题由 memos.js 接管，轮询不要把它刷回会话名 */
+    if (!(M.isMemoView && M.isMemoView())) {
+      $('sess-title').textContent = snap.current_title || '新的对话';
+    }
     $('sess-toggle').title = '会话：' + rows.length + ' 个（点击展开）';
     paintHint(snap);
     if (!open) return;
