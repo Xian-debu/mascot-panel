@@ -55,3 +55,7 @@
 .sess-empty{list-style:none;padding:10px 8px;font-size:var(--fs-11);color:var(--text-muted);}.exp-sess{font-size:var(--fs-11);padding:2px 7px;margin-left:var(--s1);flex:0 0 auto;white-space:nowrap;
   background:none;border-color:var(--border);color:var(--text-dim);}
 .exp-sess:hover{color:var(--accent);border-color:var(--accent-line);}
+/* 回收站入口紧挨着「导出」，不占 hint 的宽度 */
+.trash-sess{margin-left:var(--s1);}
+.trash-row .sess-main{cursor:default;}
+.trash-row .sess-name{color:var(--text-dim);}

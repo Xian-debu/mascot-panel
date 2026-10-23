@@ -14,6 +14,10 @@
   let results = null;
   let seq = 0;
   let timer = 0;
+  /* 回收站（C4）：mode 在「会话列表」和「回收站」之间切换，复用同一个列表 */
+  let mode = 'sessions';
+  let trashItems = null;
+  let purgingId = null;
 
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
@@ -38,6 +42,10 @@
   function paintHint(snap) {
     const hint = $('drawer-hint');
     if (Date.now() < flashUntil) { hint.textContent = flashText; return; }
+    if (mode === 'trash') {
+      hint.textContent = trashItems ? '回收站 · ' + trashItems.length + ' 个' : '回收站';
+      return;
+    }
     const total = ((snap && snap.sessions) || []).length;
     if (query) {
       hint.textContent = results ? results.length + ' 个结果 / 共 ' + total + ' 个' : '搜索中…';
@@ -148,6 +156,96 @@
     return li;
   }
 
+  /* 回收站一行：恢复 / 彻底删除（彻底删除要再点一次确认）。 */
+  function trashRow(item) {
+    const li = document.createElement('li');
+    li.className = 'sess-row trash-row';
+    li.dataset.id = item.id;
+
+    const main = document.createElement('div');
+    main.className = 'sess-main';
+    const title = document.createElement('span');
+    title.className = 'sess-name';
+    title.textContent = item.title || '新的对话';
+    const meta = document.createElement('span');
+    meta.className = 'sess-meta';
+    const bits = [];
+    if (item.count) bits.push(item.count + ' 条');
+    if (item.deleted_at) bits.push('删除于 ' + when(item.deleted_at));
+    meta.textContent = bits.join(' · ') || '空会话';
+    main.appendChild(title);
+    main.appendChild(meta);
+    li.appendChild(main);
+
+    const acts = document.createElement('span');
+    acts.className = 'sess-acts';
+    if (purgingId === item.id) {
+      const yes = document.createElement('button');
+      yes.className = 'sess-act danger';
+      yes.textContent = '彻底删除';
+      yes.title = '删除后无法恢复';
+      yes.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        purgingId = null;
+        M.api.purgeSession(item.id).then(function (res) {
+          if (res && res.ok === false) flash('删除失败');
+          loadTrash();
+        });
+      });
+      const no = document.createElement('button');
+      no.className = 'sess-act';
+      no.textContent = '取消';
+      no.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        purgingId = null;
+        repaint();
+      });
+      acts.appendChild(yes);
+      acts.appendChild(no);
+    } else {
+      const back = document.createElement('button');
+      back.className = 'sess-act';
+      back.textContent = '恢复';
+      back.title = '恢复到会话列表并切换过去';
+      back.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        M.api.restoreSession(item.id).then(function (res) {
+          if (res && res.ok === false) {
+            flash(res.reason === 'BUSY' ? '正在收发，稍后再恢复' : '恢复失败');
+            return;
+          }
+          flash('已恢复');
+          mode = 'sessions';
+          trashItems = null;
+          loadTrash();
+        });
+      });
+      const gone = document.createElement('button');
+      gone.className = 'sess-act';
+      gone.textContent = '删除';
+      gone.title = '彻底删除（会先问一次）';
+      gone.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        purgingId = item.id;
+        repaint();
+      });
+      acts.appendChild(back);
+      acts.appendChild(gone);
+    }
+    li.appendChild(acts);
+    return li;
+  }
+
+  function loadTrash() {
+    M.api.listTrash().then(function (res) {
+      trashItems = (res && res.items) || [];
+      repaint();
+    }, function () {
+      trashItems = [];
+      repaint();
+    });
+  }
+
   function commitRename(sid, title) {
     const clean = String(title || '').trim();
     editingId = null;
@@ -171,6 +269,9 @@
       drawer.setAttribute('hidden', '');
       editingId = null;
       confirmingId = null;
+      mode = 'sessions';
+      trashItems = null;
+      purgingId = null;
       if (query || results) {
         query = '';
         results = null;
@@ -191,6 +292,25 @@
     $('sess-toggle').title = '会话：' + rows.length + ' 个（点击展开）';
     paintHint(snap);
     if (!open) return;
+
+    if (mode === 'trash') {
+      const items = trashItems || [];
+      const tsig = 'trash|' + (purgingId || '') + '|' + items.map(function (it) {
+        return [it.id, it.title, it.count, it.deleted_at].join('~');
+      }).join(',');
+      if (tsig === lastSig) return;
+      lastSig = tsig;
+      const tlist = $('sess-list');
+      tlist.textContent = '';
+      items.forEach(function (item) { tlist.appendChild(trashRow(item)); });
+      if (!items.length) {
+        const empty = document.createElement('li');
+        empty.className = 'sess-empty';
+        empty.textContent = '回收站是空的';
+        tlist.appendChild(empty);
+      }
+      return;
+    }
 
     const shown = results || rows;
     const sig = current + '|' + query + '|' + (editingId || '') + '|' + (confirmingId || '') + '|' +
@@ -243,6 +363,24 @@
         if (ev.key === 'Escape') { box.value = ''; query = ''; results = null; repaint(); }
       });
     }
+    $('trash-sess').addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      if (mode === 'trash') {
+        mode = 'sessions';
+        trashItems = null;
+        lastSig = '';
+        repaint();
+        return;
+      }
+      mode = 'trash';
+      query = '';
+      results = null;
+      purgingId = null;
+      const box = $('sess-q');
+      if (box) box.value = '';
+      lastSig = '';
+      loadTrash();
+    });
     $('export-sess').addEventListener('click', function (ev) {
       ev.stopPropagation();
       flash('导出中…');

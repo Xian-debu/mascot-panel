@@ -34,6 +34,10 @@
     searchSessions: function (q) { return M.hasBridge() ? window.pywebview.api.search_sessions(q) : Promise.resolve(null); },
     /* 重试（C3）：重发上一条失败的消息 */
     retrySend: function () { return M.hasBridge() ? window.pywebview.api.retry_send() : Promise.resolve(null); },
+    /* 回收站（C4）：列表 / 恢复 / 彻底删 */
+    listTrash: function () { return M.hasBridge() ? window.pywebview.api.list_trash() : Promise.resolve(null); },
+    restoreSession: function (id) { return M.hasBridge() ? window.pywebview.api.restore_session(id) : Promise.resolve(null); },
+    purgeSession: function (id) { return M.hasBridge() ? window.pywebview.api.purge_session(id) : Promise.resolve(null); },
     /* 导出（C2）：当前会话 → Markdown */
     exportSession: function (sid) { return M.hasBridge() ? window.pywebview.api.export_session(sid || '') : Promise.resolve(null); },
     /* 消息操作（B2）：全部按 msg_id 定位 */

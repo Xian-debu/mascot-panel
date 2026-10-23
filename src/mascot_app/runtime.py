@@ -29,6 +29,7 @@ from typing import Any
 
 from mascot_app import boot
 from mascot_core import sessions as msgops
+from mascot_core import trash as trashmod
 from mascot_core.click import DOUBLE, SINGLE, ClickGate
 from mascot_core.config import Settings, load_settings, merge_hot
 from mascot_core.contract import ChatProvider, Message, SendCancelled
@@ -185,6 +186,11 @@ def _sessions_path() -> Path:
     return _state_dir() / "sessions.json"
 
 
+def _trash_path() -> Path:
+    """会话回收站：删掉的会话先放这里，可恢复。"""
+    return _state_dir() / "trash.json"
+
+
 def _history_path() -> Path:
     """旧版单会话文件：只读，一次性迁移到 sessions.json。"""
     return _state_dir() / "history.json"
@@ -320,6 +326,25 @@ def save_session_store(store: SessionStore) -> None:
         tmp.replace(path)
     except OSError as exc:
         log.warning("sessions: 写入失败 %s: %s", path, exc)
+
+
+def load_trash(now: float) -> trashmod.Trash:
+    try:
+        raw = _trash_path().read_text(encoding="utf-8")
+    except OSError:
+        return trashmod.Trash()
+    return trashmod.parse_trash(raw, now)
+
+
+def save_trash(trash: trashmod.Trash) -> None:
+    path = _trash_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(trashmod.dump_trash(trash), encoding="utf-8")
+        tmp.replace(path)
+    except OSError as exc:
+        log.warning("trash: 写入失败 %s: %s", path, exc)
 
 
 # ---- 设置（B3）：模型 + key -------------------------------------------
@@ -542,6 +567,16 @@ class JsApi:
     def delete_session(self, sid: str) -> dict[str, Any]:
         return self._rt.delete_session(sid)
 
+    # 回收站（C4）：列表 / 恢复 / 彻底删
+    def list_trash(self) -> dict[str, Any]:
+        return self._rt.list_trash()
+
+    def restore_session(self, sid: str) -> dict[str, Any]:
+        return self._rt.restore_session(sid)
+
+    def purge_session(self, sid: str) -> dict[str, Any]:
+        return self._rt.purge_session(sid)
+
     # 搜索（C1）：标题或正文命中，返回抽屉行格式
     def search_sessions(self, query: str) -> dict[str, Any]:
         return self._rt.search_sessions(query)
@@ -658,6 +693,7 @@ class Runtime:
         self._provider_detail: str = ""
         # 先挂上本次运行前落盘的多会话数据，后端历史稍后由 _load_history 合并进当前会话
         self._store = load_session_store(time.time())
+        self._trash = load_trash(time.time())
         self._sending = False
         self._send_queue: list[str] = []
         self._stream_text = ""
@@ -722,6 +758,7 @@ class Runtime:
                 "sessions": self._store.summaries(),
                 "current_session": self._store.current_id,
                 "current_title": self._store.current().title,
+                "trash_count": len(self._trash.items),
                 "settings": {
                     "fps": self.settings.fps,
                     "history_limit": self.settings.history_limit,
@@ -915,10 +952,42 @@ class Runtime:
         with self._lock:
             if self._chat_busy():
                 return {"ok": False, "reason": "BUSY"}
-            if self._store.find(sid) is None:
+            session = self._store.find(sid)
+            if session is None:
                 return {"ok": False, "reason": "NOT_FOUND"}
+            # 删 ≠ 销毁：先放进回收站（trash.json），抽屉里可以恢复或彻底删
+            self._trash.add(session, time.time())
             self._store.delete(sid, time.time())
         self._persist_sessions()
+        save_trash(self._trash)
+        return {"ok": True}
+
+    # ---- 回收站（C4） -----------------------------------------------------
+
+    def list_trash(self) -> dict[str, Any]:
+        with self._lock:
+            return {"ok": True, "items": self._trash.summaries()}
+
+    def restore_session(self, sid: str) -> dict[str, Any]:
+        with self._lock:
+            if self._chat_busy():
+                return {"ok": False, "reason": "BUSY"}
+            if self._store.find(sid) is not None:
+                return {"ok": False, "reason": "EXISTS"}
+            session = self._trash.restore(sid)
+            if session is None:
+                return {"ok": False, "reason": "NOT_FOUND"}
+            self._store.sessions.append(session)
+            self._store.current_id = session.sid
+        self._persist_sessions()
+        save_trash(self._trash)
+        return {"ok": True}
+
+    def purge_session(self, sid: str) -> dict[str, Any]:
+        with self._lock:
+            if not self._trash.purge(sid):
+                return {"ok": False, "reason": "NOT_FOUND"}
+        save_trash(self._trash)
         return {"ok": True}
 
     def search_sessions(self, query: str) -> dict[str, Any]:
