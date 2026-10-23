@@ -8,15 +8,19 @@
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import json
 import logging
 import math
 import os
+import re
 import shutil
 import threading
 import time
+import webbrowser
 from dataclasses import dataclass
+from functools import lru_cache
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -234,17 +238,20 @@ def save_session_store(store: SessionStore) -> None:
 
 
 TOKENS_PLACEHOLDER = "/*__TOKENS__*/"
+VENDOR_CSS_PLACEHOLDER = "/*__VENDOR_CSS__*/"
 CSS_PLACEHOLDER = "/*__CSS__*/"
 JS_PLACEHOLDER = "//__JS__"
 CSS_MODULES = (
     "base.css",
     "stream.css",
+    "markdown.css",
     "messages.css",
     "composer.css",
     "states.css",
     "sessions.css",
 )
 JS_MODULES = (
+    "markdown.js",
     "state.js",
     "clock.js",
     "ui.js",
@@ -260,6 +267,33 @@ def _pkg_text(rel: str) -> str:
     return resources.files("mascot_app").joinpath(rel).read_text(encoding="utf-8")
 
 
+def _pkg_bytes(rel: str) -> bytes:
+    return resources.files("mascot_app").joinpath(rel).read_bytes()
+
+
+@lru_cache(maxsize=1)
+def katex_css() -> str:
+    """KaTeX 样式；字体以内联 data URI 塞进单文件 HTML。
+
+    面板 HTML 是字符串喂给 WebView 的（about:blank），相对路径拿不到字体文件，
+    所以只能把 woff2 转 base64；woff（老格式）引用删掉，省一半体积。
+    """
+    css = _pkg_text("web/vendor/katex/katex.min.css")
+
+    def embed(match: re.Match[str]) -> str:
+        name = match.group(1)
+        data = base64.b64encode(_pkg_bytes(f"web/vendor/katex/fonts/{name}.woff2")).decode("ascii")
+        return f'url(data:font/woff2;base64,{data}) format("woff2")'
+
+    css = re.sub(r'url\(fonts/([A-Za-z0-9_-]+)\.woff2\)\s*format\("woff2"\)', embed, css)
+    # woff / ttf 老格式不再随包发，去掉这些兜底 src，省体积也免 404
+    return re.sub(r',\s*url\(fonts/[^)]+\)\s*format\("[^"]+"\)', "", css)
+
+
+def katex_js() -> str:
+    return _pkg_text("web/vendor/katex/katex.min.js")
+
+
 def load_panel_html() -> str:
     """把面板外壳、CSS 模块、JS 模块与设计 token 合成一张自包含 HTML。
 
@@ -270,8 +304,9 @@ def load_panel_html() -> str:
     js = "\n".join(_pkg_text(f"web/js/{name}") for name in JS_MODULES)
     return (
         html.replace(TOKENS_PLACEHOLDER, css_variables())
+        .replace(VENDOR_CSS_PLACEHOLDER, katex_css())
         .replace(CSS_PLACEHOLDER, css)
-        .replace(JS_PLACEHOLDER, js)
+        .replace(JS_PLACEHOLDER, katex_js() + "\n" + js)
     )
 
 
@@ -310,6 +345,9 @@ class JsApi:
     def to_panel(self) -> dict[str, Any]:
         self._rt.post(Event.CLICK_BALL)
         return {"ok": True}
+
+    def open_url(self, url: str) -> dict[str, Any]:
+        return self._rt.open_url(url)
 
     def send(self, text: str) -> dict[str, Any]:
         return self._rt.send_text(text)
@@ -529,6 +567,18 @@ class Runtime:
     def to_ball(self) -> dict[str, Any]:
         """面板按钮：把面板收进小球（只在跟随态有效）。"""
         self.post(Event.CLICK_CLOCK)
+        return {"ok": True}
+
+    def open_url(self, url: str) -> dict[str, Any]:
+        """面板里点 Markdown 链接：交给系统默认浏览器，别让 WebView 自己导航走。"""
+        target = str(url or "").strip()
+        if not re.match(r"^(https?://|mailto:)", target, re.I):
+            return {"ok": False, "reason": "BAD_URL"}
+        try:
+            webbrowser.open(target, new=2)
+        except Exception as exc:  # noqa: BLE001 - 打不开就算了，不影响聊天
+            log.warning("open_url 失败 %s: %s", target, exc)
+            return {"ok": False, "reason": "OPEN_FAILED"}
         return {"ok": True}
 
     # ---- 聊天 ---------------------------------------------------------------
