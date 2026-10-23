@@ -671,3 +671,15 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 坑：环半径第一版贴球体（sprite.width/2+2）与刻度重叠，截图几乎看不见，改到窗口半径 size/2-4 才有「球外一圈」；待机球 1s 才重绘一次，断言要留余量；state.json 每秒写一次，alert 窗口只覆盖 2–3 份快照，必须轮询读取；验收截图落在部署目录，归档要复制回仓库 evidence/。
 - 回归：M13/M24/M25/M26/M27/M28/M29 全 exit 0。
 - 交付：docs/46-m30-alert.md；evidence/m30-alert.png；build-win.sh + install-win.sh 已跑，安装版 mascot.exe 8024423 字节（23:54），current.txt=0.1.0，安装版 doctor ok（provider 项 false 属预期）。
+
+### M35 环绕球玻璃表盘 + 星光回表盘轨道（2026-10-23，用户 m00170 裁决）
+
+- 由来：M34（a8fca60）把两颗星挪到指针尖，用户否掉「完全背离我的初始设计」，并要求环绕球「能透过看到下面的文字」。规格落盘在 mascot-admin `docs/18-visual-spec.md`（D-V1 玻璃球 / D-V2 轨道星）。
+- 改法（src/mascot_render/clock.py）：
+  - D-V1：表盘底色 `p_navy` alpha 132（`DIAL_ALPHA`），边框/刻度/指针/星光保持 255；内圈加 1px 亮边（alpha 110）+ 左上角两格玻璃反光；删掉渲染末尾的 0/255 alpha 硬 snap —— 玻璃需要 132 这一档，而 ImageDraw 本来就不抗锯齿、NEAREST 放大不插值，snap 已无必要。
+  - D-V2：`star_anchors()` 删除；星回到表盘轨道（`tick_r = r - 2`），大星=时、小星=分，角度用连续值（`hour*30 + minute*0.5 + second/120`、`minute*6 + second*0.1`），绘制顺序 刻度 → 星 → 指针 → 中心轴。
+  - 彗尾：玻璃表盘让「压在球后面的尾巴」从半透明盘面透出来，在球右侧糊成一块楔形色斑。`render_orbit_frame` 里先算球心，跳过距球心 < `ball_r + 3` 的尾巴段与彗头十字。
+- 验收：离线确定性渲染核对 3:00 星在右缘、3:17 分针星落在连续 6° 角度位置且**不在指针尖**（星在 20 格、分针 14 格）；真机用开发副本（`C:/Users/Public/mascot` + `MASCOT_STATE_DIR=C:/Users/Public/mascot-devstate`）点面板头像进环绕态截图：能透出下方文字、指针清晰、无楔形色斑。本机未装 ruff/pyright（没为它装依赖）。
+- 坑：①频闪已由用户确认消失，`pptDst=NULL` 勿回退；②半透明是「分层窗口预乘 alpha」自带能力，不需要 DWM 模糊；③**改半透明前必须先盘点所有压在球后面的绘制层**——彗尾这种原本被不透明盘面挡住的内容会立刻从玻璃里透出来。
+- 未做：面板底栏仍是撤掉状态（a8fca60）；安装版仍是 M34，等用户认可后 build+install 一次。
+

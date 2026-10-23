@@ -279,6 +279,14 @@ def render_orbit_frame(
     p_cyan = _rgb("cyan", pal)
     p_bright = _rgb("cyan-bright", pal)
 
+    # 球心先算出来：彗尾要跳过落在球体圆盘内的那几段。
+    # 球改成玻璃表盘（D-V1）后，压在球后面的尾巴会从半透明表盘里透出来，
+    # 在球右半区糊成一块楔形色斑 —— 尾巴在物理上确实该被看见，但视觉上像 bug。
+    rad = math.radians(angle_deg)
+    bx = cx + orbit_r * math.cos(rad)
+    by = cy + orbit_r * math.sin(rad)
+    keep_out = ball_r + 3
+
     n = max(2, int(tail_deg / TAIL_STEP_DEG))
     for i in range(n):
         a0 = angle_deg - (i + 1) * TAIL_STEP_DEG
@@ -286,6 +294,8 @@ def render_orbit_frame(
         rad = math.radians(a0)
         x = cx + orbit_r * math.cos(rad)
         y = cy + orbit_r * math.sin(rad)
+        if math.hypot(x - bx, y - by) < keep_out:
+            continue
         s = max(1, int(ball_r * (0.14 - 0.11 * t)))
         alpha = int(130 * (1 - t) ** 1.5)
         if alpha <= 0:
@@ -294,13 +304,11 @@ def render_orbit_frame(
     head = math.radians(angle_deg - TAIL_STEP_DEG)
     hx = cx + orbit_r * math.cos(head)
     hy = cy + orbit_r * math.sin(head)
-    dr.rectangle([hx - 2, hy, hx + 2, hy], fill=(*p_bright, 170))
-    dr.rectangle([hx, hy - 2, hx, hy + 2], fill=(*p_bright, 170))
+    if math.hypot(hx - bx, hy - by) >= keep_out:
+        dr.rectangle([hx - 2, hy, hx + 2, hy], fill=(*p_bright, 170))
+        dr.rectangle([hx, hy - 2, hx, hy + 2], fill=(*p_bright, 170))
 
     sprite = _render_sprite(ball_r * 2, now=now, stuck=stuck, hover=hover, pulse=0.5)
-    rad = math.radians(angle_deg)
-    bx = cx + orbit_r * math.cos(rad)
-    by = cy + orbit_r * math.sin(rad)
     img.alpha_composite(sprite, (round(bx - sprite.width / 2), round(by - sprite.height / 2)))
     if alert:
         _draw_alert_ring(img, round(bx), round(by), ball_r + 8, pal)
