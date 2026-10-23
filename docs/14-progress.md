@@ -661,3 +661,21 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 验收（真机）：python/bash/sql/js/json 五种代码块截图确认上色；坏 key 连发两条 → 设置页粘回真实 key → 自动冲刷出两条回复、`outbox.json` 消失；杀进程再正常启动 → 队列自动补发（会话 6 条无重复）。
 - 坑：`winps - < script.ps1` 不会把外部环境变量透传进 PowerShell（`C5_DIR=... winps` 无效），要改路径就得重新生成脚本。
 
+
+### M43 备忘录（2026-10-23，用户 m02879）
+
+- 由来：重复文本多、翻找复制粘贴费劲；要「沿用消息气泡样式但只记文本」的备忘录，分组要好查找，靠「始终在顶端 + 开机自启」取胜。详见 `docs/58-memos.md`。
+- 数据层：新 `src/mascot_core/memos.py`（纯逻辑）：`Memo`/`MemoGroup`/`MemoStore`，置顶区 + 单层自建组 + 未分组，`grouped()` 出分区；不填标题自动取正文首行；落盘 `memos.json`（写前留 `.bak`）。
+- 运行时：10 个桥方法（增删改、置顶、移动、分组建改删、从消息存为备忘）+ 快照 `memo_count`。
+- 面板：标题栏记事本按钮切视图；分区渲染、拖放归组、单击复制全文、搜索平铺、新建/编辑卡片、组内联改名与两段式删组；消息操作条加「存为备忘」图标。
+- 验收（真机）：分区/复制/新建/拖放归组/建组改名删组/搜索/重启保留全部通过；消息条存备忘落盘成功。
+- 坑：`display:flex` 盖掉 `hidden` → 全局 `[hidden]{display:none!important}`；轮询把备忘视图标题刷回会话名；组头操作只在 hover 出现导致「找不到入口」。
+
+
+### M44 全局热键快速记备忘（2026-10-23，用户 m02879）
+
+- 由来：三种记录来源里的第三种——不点面板也能记。详见 `docs/58-memos.md`。
+- 实现：daemon 线程注册系统热键 + `GetMessageW` 循环，命中后叫出面板并经 `evaluate_js` 调 `window.MemoQuickOpen()`，直接落到新建备忘卡片。
+- 候选组合键逐个尝试：Ctrl+Alt+M 被占用 → 自动退到 Ctrl+Shift+M（本机最终生效）。
+- 坑：线程内 `from mascot_win import wt` 是错的（`wt` = `ctypes.wintypes`），ImportError 让线程静默死掉，日志空白。
+- 偏差：热键会打开面板（占屏），不是独立的迷你捕获窗，已向用户说明。
