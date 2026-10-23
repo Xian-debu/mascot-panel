@@ -619,106 +619,15 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 痛点：已知缺口「待机球无双击复位」；双击是比右键菜单少两步的「把球放回去」手势。
 - 为什么不用 WM_LBUTTONDBLCLK：它要求窗口类带 CS_DBLCLKS，且系统仍先送一次普通单击消息——会出现「第一次单击已经打开面板，双击再复位」的错误顺序。
 - 新增纯逻辑 `src/mascot_core/click.py`：`ClickGate(window_ms=350)`，`click(now)` 第一次挂起、窗口内第二次返回 double；`tick(now)` 超时返回 single；`reset()` 放弃挂起。
-- runtime.py：球的 on_click 改为 `_on_ball_click`（非 IDLE 立刻 post CLICK_BALL，行为不变；IDLE 时喂 ClickGate，double 就 `_reset_ball_to_corner()`）；工作线程每轮 tick，single 才 post CLICK_BALL；`_on_ball_drag` 开头 reset（拖动不是点击）；托盘「小球回到右下角」与新方法共用。
-- 验收 scripts/verify_m25.py 11/11 PASS：球在角落 → 真鼠标拖到 789,469（ball_pos 落盘）→ 双击回 2408,1448 且 ball_pos 清空、状态仍 idle（面板没开）→ 随后单击正常打开面板（2048,942 488×634）、exit 0；回归 M13/M14/M15/M16/M24 全 ok=true。
-- 坑：双击不是一条独立消息，每次点击都要喂 ClickGate；拖动前不 reset 会在松手 350ms 后弹面板；pywebview 的 hidden=True 并没有真的藏窗口（启动时 ws_visible=true），验收不能用 IsWindowVisible 判「面板没打开」。
-- 遗留：单击开面板多 350ms 延迟（窗口常量，未做成配置）；轨道球无双击手势；启动时那个 WS_VISIBLE 但画不出内容的面板窗口是否拦点击未验证（留 M26）。
-- 交付：docs/41-m25-ball-double-click.md；build-win.sh + install-win.sh 已跑，安装版 mascot.exe 8021164 字节（23:28），current.txt=0.1.0，安装版 doctor ok（provider 项 false 属预期）。
 
-### M26 启动时面板窗口真隐藏（2026-10-22 夜）
+### M39 设置页 + 开始菜单项 + 备份轮转（2026-10-23，用户 m01891）
 
-- 痛点：M25 验收时探针发现——无宠物启动 6s 后 `mascot-panel` 的 hwnd 存在、`WS_VISIBLE` 为真、rect 2048,942 488×634，只是画不出内容。`create_window(hidden=True)` 并没有真藏住。
-- 根因：pywebview 6.2.1 的 hidden 分支是 `Opacity=0 → Show → Hide → Opacity=1`（WebView2 必须先 Show 才初始化），但 WebView2 导航完成后内部还会再 Show 一次。
-- 改法两层（`src/mascot_app/runtime.py`）：① `_on_gui_start()` 里若状态机是 `State.IDLE` 就 `win32.show_window(hwnd, False)` 并打 boot 标记 `panel_hidden_at_start`；② 主循环每轮 `_enforce_panel_hidden(now)`（0.3s 节流）在 IDLE 且 `is_visible` 时再藏一次，防 pywebview 后续又 Show。
-- 关键坑：判定「该藏」必须用状态机状态，而不是自维护的 `_panel_shown` 布尔——第一版用标志时撞上「状态先记、副作用后跑」的竞态：`state_idle_open:625` 早于 `panel_hidden_at_start:687`，把刚要求显示的面板藏了。改读 `machine.state is State.IDLE` 后消失。
-- 验收 `scripts/verify_m26.py` 7 项全 true：`panel_hidden_at_start`（`WS_VISIBLE`=0、`IsWindowVisible`=false）、`panel_ws_visible`=false、`panel_not_blocking_clicks`（`WindowFromPoint(面板中心)` 返回别的窗口）、`stays_hidden`（再等 2s 仍隐藏）、点球 → `idle_open` 且 `panel_shown_ws_visible`=true、`ctl to-ball` → `panel_hidden_again`=true、exit 0。回归 M13/M14/M15/M16/M24/M25 全 exit 0。
-- 遗留：面板在 IDLE_OPEN 时仍 topmost（跟随宠物压在上方属设计）；`WS_EX_TOOLWINDOW` 只在首次拿 hwnd 时设（无重建场景）；透明 hack 分支未验证。
-- 交付：docs/42-m26-panel-hidden.md；build-win.sh + install-win.sh 已跑，安装版 mascot.exe 8021744 字节（23:34），current.txt=0.1.0，安装版 doctor ok。
-
-### M27 跟随态面板记住相对宠物偏移（2026-10-22 夜）
-
-- 痛点：M24 的位置记忆是绝对坐标，宠物一移动面板就掉队（plan §8 P1「跟随框记住拖拽偏移」）。
-- 改法（src/mascot_app/runtime.py）：新增 load_panel_offset()/save_panel_offset()（runtime.json 的 panel_offset 键）；_adopt_panel_pos() 有宠物时同时记 pos - pet.xy、无宠物时清掉；_place_panel() 在绝对位置分支之前插入「宠物 + 偏移 → clamp → 移动」；_reset_panel_pos() 两个键一起清；落盘仍是稳定后一次写。
-- 验收 scripts/verify_m27.py 10 项全 true：用 ctypes 造类名 MascotFakePet 的假宠物窗口（后台泵 PeekMessage），设 MASCOT_PET_WINDOW_CLASS 让它被真跟随；面板从 530,110 被真鼠标拖到 370,250 → panel_offset=[50,10]、panel_pos=[370,250]；假宠物 +180/+120 后面板到 550,370（偏移不变）；ctl reset-panel 后两个键清空、面板回 710,230。
-- 坑：假窗口必须可见且有尺寸（tracker 只枚举 is_visible 且 w/h>0）；必须泵消息；跟随分支要在绝对分支之前；验收要断言「偏移不变」而不是「面板动了」。
-- 遗留：只有拖过的面板用偏移（没拖过用 follow_offset 配置）；换分辨率不按比例迁移；宠物尺寸变化只按左上角算。
-- 交付：docs/43-m27-panel-offset.md；build-win.sh + install-win.sh 已跑，安装版 mascot.exe 8022338 字节（23:38），current.txt=0.1.0，安装版 doctor ok。
-
-### M28 待机球双击时间窗可配置（2026-10-22 夜）
-
-- 痛点：M25 的单击开面板要硬等 350ms 双击窗口（已知缺口）；不用双击的人白等，还没法调。
-- 改法：config 新增 click_window_ms（默认 350，范围 0–2000，属 HOT_FIELDS）；ClickGate 支持 0 = 关闭双击手势（click() 直接 SINGLE、不挂起）；runtime 的 _on_ball_click 改走 ClickGate.click，热重载时重建 gate；snapshot.settings 暴露该值。
-- 验收 scripts/verify_m28.py：click_window_ms=0 时单击开面板 0.023 / 0.026s；热改 350（hot=true）后 0.373 / 0.369s，两轮 ok:true、exit 0。
-- 坑：单次计时会被冷启动首击（0.635s）打成假失败——改成 3 次取最快；热重载必须重建 gate，否则挂起的单击会按新窗口结算。
-- 遗留：默认仍 350ms，要快的用户自己 config set click_window_ms 0；没有长按等替代手势。
-- 交付：docs/44-m28-click-window.md；build-win.sh + install-win.sh 已跑，安装版 mascot.exe 8022720 字节（23:44），current.txt=0.1.0，安装版 doctor ok（provider 项 false 属预期）。
-
-### M29 环绕球双击暂停/恢复公转（2026-10-22 夜）
-
-- 痛点：plan §8 P1 未做；球一直匀速转，想安静读时钟或不想它动只能开面板（球消失）。
-- 改法：runtime 新增 _orbit_paused/_orbit_frozen_t；_on_ball_click 分状态——ORBITAL 走 ClickGate（双击 → _toggle_orbit_pause，单击 → 回面板）；暂停冻结角度，恢复反推 _orbit_t0 从同一角度接着转；快照新增 orbit_paused 与 ball_circle（球命中圆屏幕坐标）。
-- 验收 scripts/verify_m29.py 11 项全 true：假宠物 + ctl to-ball 进环绕态；orbit_speed 先配 0.05 让球 10px/s 可点中；双击 → paused 且仍在 orbital、1.3s 内位移 0；再双击 → 恢复、位移 9px；单击回面板（tracking）。
-- 坑：状态文件 1s 写一次，"球在不在动"必须轮询取样（固定 0.8s sleep 读到同一份 → 假失败）；ball_circle 必须存屏幕坐标；恢复要反推 t0 否则角度跳回 0°。
-- 回归：M13/M24/M25/M26/M27/M28 全 exit 0。
-- 交付：docs/45-m29-orbit-pause.md；build-win.sh + install-win.sh 已跑，安装版 mascot.exe 8023457 字节（23:49），current.txt=0.1.0，安装版 doctor ok（provider 项 false 属预期）。
-
-### M30 新消息到达时小球亮提示环（2026-10-22 夜）
-
-- 痛点：面板收起（待机球/环绕球）时后端回了消息用户完全不知道，球只是一个安静的时钟。
-- 改法：clock.py 新增 _draw_alert_ring（28 个 3×3 像素点围一圈，硬边不抗锯齿）与 render_clock/render_orbit_frame 的 alert 参数（待机球半径 size/2-4，环绕球半径 ball_r+8，颜色走 palette 的 cyan-bright）；runtime 新增 ALERT_S=2.5、_alert_until、_mark_alert()（assistant 完整回复与「停止后的部分文本」落盘后各调一次）、_alert_active()，渲染时传入，snapshot 暴露只读 alert 字段。不改状态机、不落盘、不发事件。
-- 验收 scripts/verify_m30.py 9 项全 PASS：起假聊天后端（dev-chat-backend.py，随机端口）+ 无宠物进 idle → alert=false → ctl send → 假后端回复 → alert=true → 截全屏 evidence/m30-alert.png → 2.5s 后 alert 自动回落 false、状态仍 idle → exit 0。
-- 单测 test_clock.py 追加 3 项：环让不透明像素 +40 以上且外接矩形更靠边、重复渲染逐像素一致、环绕帧带环像素增加。
-- 坑：环半径第一版贴球体（sprite.width/2+2）与刻度重叠，截图几乎看不见，改到窗口半径 size/2-4 才有「球外一圈」；待机球 1s 才重绘一次，断言要留余量；state.json 每秒写一次，alert 窗口只覆盖 2–3 份快照，必须轮询读取；验收截图落在部署目录，归档要复制回仓库 evidence/。
-- 回归：M13/M24/M25/M26/M27/M28/M29 全 exit 0。
-- 交付：docs/46-m30-alert.md；evidence/m30-alert.png；build-win.sh + install-win.sh 已跑，安装版 mascot.exe 8024423 字节（23:54），current.txt=0.1.0，安装版 doctor ok（provider 项 false 属预期）。
-
-### M35 环绕球玻璃表盘 + 星光回表盘轨道（2026-10-23，用户 m00170 裁决）
-
-- 由来：M34（a8fca60）把两颗星挪到指针尖，用户否掉「完全背离我的初始设计」，并要求环绕球「能透过看到下面的文字」。规格落盘在 mascot-admin `docs/18-visual-spec.md`（D-V1 玻璃球 / D-V2 轨道星）。
-- 改法（src/mascot_render/clock.py）：
-  - D-V1：表盘底色 `p_navy` alpha 132（`DIAL_ALPHA`），边框/刻度/指针/星光保持 255；内圈加 1px 亮边（alpha 110）+ 左上角两格玻璃反光；删掉渲染末尾的 0/255 alpha 硬 snap —— 玻璃需要 132 这一档，而 ImageDraw 本来就不抗锯齿、NEAREST 放大不插值，snap 已无必要。
-  - D-V2：`star_anchors()` 删除；星回到表盘轨道（`tick_r = r - 2`），大星=时、小星=分，角度用连续值（`hour*30 + minute*0.5 + second/120`、`minute*6 + second*0.1`），绘制顺序 刻度 → 星 → 指针 → 中心轴。
-  - 彗尾：玻璃表盘让「压在球后面的尾巴」从半透明盘面透出来，在球右侧糊成一块楔形色斑。`render_orbit_frame` 里先算球心，跳过距球心 < `ball_r + 3` 的尾巴段与彗头十字。
-- 验收：离线确定性渲染核对 3:00 星在右缘、3:17 分针星落在连续 6° 角度位置且**不在指针尖**（星在 20 格、分针 14 格）；真机用开发副本（`C:/Users/Public/mascot` + `MASCOT_STATE_DIR=C:/Users/Public/mascot-devstate`）点面板头像进环绕态截图：能透出下方文字、指针清晰、无楔形色斑。本机未装 ruff/pyright（没为它装依赖）。
-- 坑：①频闪已由用户确认消失，`pptDst=NULL` 勿回退；②半透明是「分层窗口预乘 alpha」自带能力，不需要 DWM 模糊；③**改半透明前必须先盘点所有压在球后面的绘制层**——彗尾这种原本被不透明盘面挡住的内容会立刻从玻璃里透出来。
-- 未做：面板底栏仍是撤掉状态（a8fca60）；安装版仍是 M34，等用户认可后 build+install 一次。
-
-### M36 / B1 本地多会话（2026-10-23，用户 m00413 授权开工 B）
-
-- 由来：面板只有一条时间线，想开新话题只能清空、清空就没了。B 阶段第一步 = 多会话 + 面板内会话抽屉，详见 `docs/50-sessions.md`。
+- 由来：B3 剩余项（设置页、开始菜单项）；另有一次安装版会话数据丢失事故，顺带加了三代备份轮转。详见 `docs/54-settings-shortcut.md`。
 - 改法：
-  - 新 `src/mascot_core/sessions.py`（纯逻辑、无 IO）：`Session` / `SessionStore`（find / current / summaries / create / switch / rename / delete / touch / title_from）+ `parse_store` / `dump_store` / `from_history` / `auto_title` / `new_sid`；会话上限 200、标题 40 字、至少留一个会话。
-  - `runtime.py`：对话真源从 `history.json` 换成状态目录里的 `sessions.json`（原子写：临时文件 + replace）；首次启动且只有旧 `history.json` 时自动迁移成一个会话（旧文件保留当回滚保险）；`_messages` 始终指向当前会话，其余逻辑不用改；快照增 `sessions` 摘要数组 / `current_session` / `current_title`；桥接增 `new_session / switch_session / rename_session / delete_session`，**聊天进行中调用一律返回 BUSY**；`clear_history` 只清当前会话。
-  - 面板：标题栏会话名变成按钮（原渐变字保留）+ 下拉抽屉（＋新会话、会话数、每行标题/条数/相对时间/预览，当前行高亮）；行内改名（Enter 确认、Esc 取消）、两段式删除（删除 → 删除/取消）；非当前行的操作 hover 才露出。
-  - 消息渲染签名加了 session id 前缀，切换会话时强制重绘；抽屉按签名去重，1s 轮询不会打断正在编辑的改名输入框。
-- 验收（真机点击，开发副本 + `MASCOT_STATE_DIR=C:/Users/Public/mascot-b1state`）：旧 `history.json` 3 条消息 → 迁移成 1 会话且标题正确；＋新会话 → 2 个会话且 current 切走；空会话发一句话 → 标题自动变；改名「会话甲」→ 落盘；点另一行 → 界面整体切换且抽屉收起；删除确认 → 剩 1 个会话、current 不变；杀进程重启 → 会话/标题/消息/current 全部原样。
-- 坑：①`summaries` 排序键写 `s.sid != current_id` 会先把当前会话排最前再被 `[-200:]` 裁掉，必须是 `==`；②全仓 `ruff format src` 会重排 15 个无关文件，只 format 改动的文件；③面板 `WS_EX_NOACTIVATE`，脚本点击前必须 `wwin focus`，hover 才出现的按钮要先 `winput move`。
-- 未做：会话搜索、删除回收站、抽屉分页（现全列、超出滚动）。
-
-
-
-### M37 / B2 消息操作（2026-10-23，用户 m00718 授权，m01245 改图标+拖动）
-
-- 由来：原版 pet-overlay 的消息操作条（复制/编辑/版本/冻结/折叠/上下移）是「能改历史」的核心能力，B1 只有会话抽屉。详见 `docs/51-message-ops.md`。
-- 改法：
-  - `contract.py`：`Message` 去掉 frozen dataclass，增加 `frozen / collapsed / history`；`to_dict` 只在非空时输出，带 `versions` 计数。
-  - `sessions.py`：新增 `find_index / toggle_freeze / bulk_freeze / toggle_collapse / edit_message / switch_version / move_message / move_to / merge_messages`（全部纯逻辑，`history` 上限 10 版）。
-  - `runtime.py`：冻结消息不进模型上下文；桥接 `freeze_message / bulk_freeze / collapse_message / edit_message / switch_version / move_message / merge_messages / reorder / summarize`；总结在后台线程调 DeepSeek，`snapshot.summarizing` 供前端显示；发消息时给无 id 的回复补 `ai-<ns>`，本地用户消息 id 改 `local-<sid>-<ns>`（合并后 len 会撞）。
-  - `providers/deepseek.py`：`complete(system, user)` 非流式摘要接口。
-  - 面板：操作条改 14px 线性图标（复制/折叠/编辑/冻结/↩N/拖动把手/勾选）；**上下移改成拖动**（按住把手拖到目标消息上方或下方，落点画高亮线，拖到空白处=移到末尾）；多选态左侧勾选框 + 底部选区条（冻结/解冻/合并/总结/取消）；`buildBody` 支持 `**粗体**`。
-- 验收（真机，开发副本 + `MASCOT_STATE_DIR=C:/Users/Public/mascot-b2state`）：冻结落盘 + 角标 + 重启保持；折叠一行；编辑后旧正文进 history、版本 ↩1 可来回切；拖动第一条到第二下方 → `sessions.json` 顺序变了且界面即时跟随；多选 3 条合并成一条 assistant（三段带角色前缀）；多选 2 条总结 → DeepSeek 返回摘要替换选中项。
-- 坑：①`renderMessages` 的「编辑中不重绘」闸门必须能被 `refreshMessages(force)` 绕过，否则一次误点编辑就让所有刷新停摆；②编辑框会被 `.msg.collapsed .body` 裁成一条线；③两字按钮在窄气泡里会竖排，图标化后消失；④合并/摘要里的 `**粗体**` 必须有渲染，否则满屏星号；⑤改 web 资源后必须 deploy + venv `--force-reinstall`（venv 是拷贝安装），否则 site-packages 里还是旧 JS。
-- 未做：总结不可取消、合并/总结/删除没有撤销、选区条窄窗换行。
-
-### M38 文本渲染 + B3 输入区（2026-10-23，用户 m01564）
-
-- 由来：用户指出面板里 DeepSeek 回复的 Markdown/LaTeX 全是裸文本；B3 要求输入框自适应、草稿落盘、IME 安全。详见 `docs/52-markdown-katex.md`、`docs/53-b3-composer.md`。
-- 改法：
-  - 内置 KaTeX 0.16.11（`web/vendor/katex`），`runtime.load_panel_html()` 组装时把 CSS 的 `url(fonts/*.woff2)` 换成 base64 data URI 内联（面板是字符串喂 WebView，相对路径取不到字体）；新增 `open_url()` 桥，链接交系统浏览器。
-  - 新 `web/js/markdown.js`（自写解析器）：块级标题/列表/引用/分隔线/表格/围栏代码/整块公式，行内公式四种定界符/粗斜体/删除线/行内代码/链接；DOM 手搭，不用 innerHTML。
-  - `chat.js` 的 `buildBody` 改为走渲染器，**删掉按源码行数自动折叠**（渲染后行数对不上会吞段落），折叠交给操作条落盘的 `collapsed`。
-  - 草稿：localStorage 在 `about:blank` 源下不持久 → 改落 `<状态目录>/draft.txt`，新增 `draft()`/`save_draft()` 桥，输入 400ms 防抖、发送即清；输入框按 `scrollHeight` 自适应 1–4 行；Enter 发送 / Shift+Enter 换行，`compositionstart/end` + `ev.isComposing` 双闸门保护中文输入法。
-- 验收（真机，`MASCOT_STATE_DIR=C:/Users/Public/mascot-b3state`）：斯托克斯定理那段标题/行间积分/行内向量全部排版；列表/表格/引用/围栏代码+复制/链接点开正常；真实提问的流式回复里列表与公式逐字渲染；4 行草稿撑满输入框；草稿重启回填、发送后 `draft.txt` 消失。
-- 坑：①转义判断若排在公式前面，\(V\) 会被当成转义括号；②KaTeX display 模式不能包 div（会拆段落），一律 span + CSS `display:block`；③未闭合的 `$$…` 曾吞掉整条消息，现回退成段落；④面板内导航会把 UI 顶掉，链接必须走 `open_url`。
-- 未做：代码块高亮、表格横向滚动条样式、LaTeX 出错时的降级提示。
-
+  - `runtime.py`：`get_settings() / save_settings(model, key)`，模型写 `config.toml` 并立即生效，key 写用户级环境变量 `DEEPSEEK_AUTH_TOKEN`（`winreg` + `WM_SETTINGCHANGE` 广播 + 同步本进程），保存后起线程探健康；面板标题栏加齿轮，`settings.js/settings.css` 实现浮层。
+  - `scripts/make-shortcut.ps1` + `install-win.sh / uninstall-win.sh`：开始菜单项「天选姬.lnk」的创建与删除（PowerShell 脚本必须纯 ASCII）。
+  - `save_session_store`：写盘前轮转 `.bak / .bak1 / .bak2` 三代备份。
+- 验收（真机，开发副本 + 安装版）：切模型落盘且重启保持；写错 key 立即变「降级 / HTTP 401」，还原后恢复；reasoner 真发消息有回复；开始菜单 `天选姬.lnk` target/workdir 正确，乱码旧快捷方式已清。
+- 事故：安装版「你好」会话 5 条消息在同一时段被覆盖成空会话，2 条真实对话丢失（根因未查明，已如实告知用户）；已从 `history.json` 迁移回 3 条，并加三代备份轮转。
+- 坑：①22px 图标按钮必须 `padding:0`，否则图标被压没；②PowerShell 5.1 按 ANSI 读 `.ps1`，脚本里有中文注释会语法报错；③只留一份 `.bak` 挡不住坏写。
+- 未做：会话搜索、删除回收站、数据丢失根因定位。
