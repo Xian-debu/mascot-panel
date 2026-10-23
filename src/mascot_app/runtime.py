@@ -188,6 +188,36 @@ def _history_path() -> Path:
     return _state_dir() / "history.json"
 
 
+def _draft_path() -> Path:
+    """输入框草稿：WebView 的 localStorage 在 about:blank 源下不持久，只能落盘到状态目录。"""
+    return _state_dir() / "draft.txt"
+
+
+MAX_DRAFT = 4000
+
+
+def load_draft() -> str:
+    try:
+        return _draft_path().read_text(encoding="utf-8")[:MAX_DRAFT]
+    except OSError:
+        return ""
+
+
+def save_draft(text: str) -> None:
+    body = str(text or "")[:MAX_DRAFT]
+    path = _draft_path()
+    try:
+        if not body.strip():
+            with contextlib.suppress(OSError):
+                path.unlink(missing_ok=True)
+            return
+        tmp = path.with_suffix(".txt.tmp")
+        tmp.write_text(body, encoding="utf-8")
+        tmp.replace(path)
+    except OSError as exc:
+        log.warning("draft: 写入失败 %s: %s", path, exc)
+
+
 def load_legacy_history() -> list[Message]:
     """旧版 history.json 里的对话；文件坏了当空，绝不因此启动失败。"""
     try:
@@ -348,6 +378,14 @@ class JsApi:
 
     def open_url(self, url: str) -> dict[str, Any]:
         return self._rt.open_url(url)
+
+    # 草稿（B3）：输入框内容落盘，重启/切会话都不丢
+    def draft(self) -> dict[str, Any]:
+        return {"ok": True, "text": load_draft()}
+
+    def save_draft(self, text: str) -> dict[str, Any]:
+        save_draft(text)
+        return {"ok": True}
 
     def send(self, text: str) -> dict[str, Any]:
         return self._rt.send_text(text)
