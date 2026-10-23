@@ -12,9 +12,10 @@ import json
 from mascot_core.contract import Message
 
 MAX_TEXT = 4000
+MAX_VERSIONS = 10  # 编辑历史最多留 10 层（旧版上限，够回退又不至于撑爆记录）
 
 
-def _as_message(item: object) -> Message | None:
+def _as_message(item: object, idx: int) -> Message | None:
     if not isinstance(item, dict):
         return None
     role = item.get("role")
@@ -27,17 +28,34 @@ def _as_message(item: object) -> Message | None:
     ts = item.get("ts")
     ts = float(ts) if isinstance(ts, (int, float)) else 0.0
     mid = item.get("id")
-    mid = mid if isinstance(mid, str) else ""
-    return Message(role=role, text=text, ts=ts, msg_id=mid)
+    mid = mid if isinstance(mid, str) and mid else f"mig-{idx}-{int(ts)}"
+    raw_hist = item.get("history")
+    history = (
+        [h[:MAX_TEXT] for h in raw_hist if isinstance(h, str) and h][-MAX_VERSIONS:]
+        if isinstance(raw_hist, list)
+        else []
+    )
+    return Message(
+        role=role,
+        text=text,
+        ts=ts,
+        msg_id=mid,
+        frozen=item.get("frozen") is True,
+        collapsed=item.get("collapsed") is True,
+        history=history,
+    )
 
 
 def parse_messages(items: object) -> list[Message]:
-    """把任意 list 里像消息的条目转成 Message，其余跳过（迁移/多会话共用）。"""
+    """把任意 list 里像消息的条目转成 Message，其余跳过（迁移/多会话共用）。
+
+    没 id 的条目补一个确定性的 id（消息操作全靠 id 定位，空 id 会互相串）。
+    """
     if not isinstance(items, list):
         return []
     out: list[Message] = []
-    for item in items:
-        msg = _as_message(item)
+    for idx, item in enumerate(items):
+        msg = _as_message(item, idx)
         if msg is not None:
             out.append(msg)
     return out

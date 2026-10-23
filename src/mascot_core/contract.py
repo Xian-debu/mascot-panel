@@ -29,15 +29,39 @@ class ProviderHealth:
         return self.state is HealthState.UP
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class Message:
+    """一条消息。B2 起可变：面板要就地编辑/冻结/折叠/换版本。
+
+    冻结（frozen）= 不发给 AI（旧版语义）；折叠（collapsed）= 面板只显示一行；
+    history 是旧文本栈（末尾最新），换版本就是在栈与正文之间轮转。
+    """
+
     role: str  # "user" | "assistant"
     text: str
     ts: float = 0.0
     msg_id: str = ""
+    frozen: bool = False
+    collapsed: bool = False
+    history: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
-        return {"role": self.role, "text": self.text, "ts": self.ts, "id": self.msg_id}
+        # 面板要的东西就这些；空字段不发，快照别为默认值付流量
+        out: dict[str, object] = {
+            "role": self.role,
+            "text": self.text,
+            "ts": self.ts,
+            "id": self.msg_id,
+        }
+        if self.frozen:
+            out["frozen"] = True
+        if self.collapsed:
+            out["collapsed"] = True
+        if self.history:
+            # 旧版本正文必须落盘，否则换版本一重启就丢；versions 只是给面板显示的计数
+            out["history"] = list(self.history)
+            out["versions"] = len(self.history)
+        return out
 
 
 @dataclass(frozen=True, slots=True)

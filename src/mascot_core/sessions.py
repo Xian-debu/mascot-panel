@@ -13,7 +13,7 @@ import json
 from dataclasses import dataclass, field
 
 from mascot_core.contract import Message
-from mascot_core.history import parse_messages
+from mascot_core.history import MAX_TEXT, MAX_VERSIONS, parse_messages
 
 VERSION = 1
 DEFAULT_TITLE = "新的对话"
@@ -218,6 +218,113 @@ def from_history(messages: list[Message], now: float) -> SessionStore:
     first_user = next((m.text for m in messages if m.role == "user"), "")
     session.title = auto_title(first_user) if first_user else DEFAULT_TITLE
     return store
+
+
+# ---- 消息操作（B2） ---------------------------------------------------------
+# 一律按 msg_id 定位：面板重绘后下标会变，id 不会。
+
+
+def find_index(messages: list[Message], msg_id: str) -> int:
+    if not msg_id:
+        return -1
+    for i, msg in enumerate(messages):
+        if msg.msg_id == msg_id:
+            return i
+    return -1
+
+
+def toggle_freeze(messages: list[Message], msg_id: str) -> bool | None:
+    """冻结/解冻一条；返回新状态，找不到返回 None。"""
+    i = find_index(messages, msg_id)
+    if i < 0:
+        return None
+    messages[i].frozen = not messages[i].frozen
+    return messages[i].frozen
+
+
+def bulk_freeze(messages: list[Message], ids: list[str], frozen: bool) -> int:
+    """把选中的消息统一设成冻结/不冻结，返回实际改动的条数。"""
+    wanted = set(ids)
+    changed = 0
+    for msg in messages:
+        if msg.msg_id in wanted and msg.frozen != frozen:
+            msg.frozen = frozen
+            changed += 1
+    return changed
+
+
+def toggle_collapse(messages: list[Message], msg_id: str) -> bool | None:
+    i = find_index(messages, msg_id)
+    if i < 0:
+        return None
+    messages[i].collapsed = not messages[i].collapsed
+    return messages[i].collapsed
+
+
+def edit_message(messages: list[Message], msg_id: str, text: str) -> bool:
+    """就地改正文；旧正文进 history 栈（超过 10 层丢最旧），空文本/无变化不改。"""
+    i = find_index(messages, msg_id)
+    clean = (text or "").strip()[:MAX_TEXT]
+    if i < 0 or not clean or messages[i].text == clean:
+        return False
+    msg = messages[i]
+    msg.history.append(msg.text)
+    if len(msg.history) > MAX_VERSIONS:
+        del msg.history[: len(msg.history) - MAX_VERSIONS]
+    msg.text = clean
+    return True
+
+
+def switch_version(messages: list[Message], msg_id: str) -> bool:
+    """在正文与 history 栈之间轮转：当前正文进栈头，栈尾顶上正文（旧版语义）。"""
+    i = find_index(messages, msg_id)
+    if i < 0 or not messages[i].history:
+        return False
+    msg = messages[i]
+    previous = msg.history.pop()
+    msg.history.insert(0, msg.text)
+    msg.text = previous
+    return True
+
+
+def move_message(messages: list[Message], msg_id: str, direction: str) -> bool:
+    """上移/下移一条（direction = "up" | "down"），到头了返回 False。"""
+    i = find_index(messages, msg_id)
+    j = i - 1 if direction == "up" else i + 1
+    if i < 0 or j < 0 or j >= len(messages):
+        return False
+    messages[i], messages[j] = messages[j], messages[i]
+    return True
+
+
+def merge_messages(messages: list[Message], ids: list[str]) -> int | None:
+    """把选中的 ≥2 条合成一条，插回最小下标处；返回新下标，不足两条返回 None。
+
+    角色：全 user 保持 user、全 assistant 保持 assistant、混合则记成 assistant
+    并在每段前加 **User:** / **Assistant:** 前缀（旧版语义）。
+    """
+    idx = sorted({find_index(messages, mid) for mid in ids} - {-1})
+    if len(idx) < 2:
+        return None
+    picked = [messages[i] for i in idx]
+    roles = {msg.role for msg in picked}
+    if len(roles) == 1:
+        role = picked[0].role
+        text = "\n\n".join(msg.text for msg in picked)
+    else:
+        role = "assistant"
+        label = {"user": "User", "assistant": "Assistant"}
+        text = "\n\n".join(f"**{label.get(msg.role, msg.role)}:** {msg.text}" for msg in picked)
+    merged = Message(
+        role=role,
+        text=text[:MAX_TEXT],
+        ts=picked[0].ts,
+        msg_id=f"merge-{int(max(m.ts for m in picked) * 1000)}",
+    )
+    messages[idx[0]] = merged
+    for i in reversed(idx[1:]):
+        del messages[i]
+    return idx[0]
 
 
 def dump_store(store: SessionStore) -> str:
