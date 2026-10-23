@@ -652,3 +652,12 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 面板：抽屉头部「回收站」按钮切换视图；行内「恢复 / 删除（两段式彻底删除）」；恢复后自动切回列表并选中。
 - 验收（真机）：删会话落 `trash.json`（含完整消息）→ 回收站列表 → 恢复后消息完好且 current 切过去 → 彻底删除后文件清空、显示"回收站是空的"→ 删最后一个会话自动补空会话 → 重启后回收站内容仍在。
 
+
+### M42 阶段 C 收尾：代码块高亮 + 离线待发队列（2026-10-23，用户 m02686）
+
+- 由来：C 阶段还剩"看得清"和"丢不了"两项，用户要求"推进到底"。详见 `docs/57-highlight-offline.md`。
+- C5 语法高亮：新 `web/js/highlight.js`（自写分词器，~200 行，不引 highlight.js）；支持 py/js/ts/json/bash/sql/c/cpp/rust/go/java/yml/css/html；`markdown.js` 的 `codeEl(code, lang)` 接上语言名并显示左上角语言标签；配色 Tokyo Night 系。
+- C6 离线队列：`<状态目录>/outbox.json` 落盘待发消息（上限 50、同文本去重、原子写）；发送失败入队并顺延 30s；后端健康探测发现恢复即自动冲刷（重发前按 `msg_id` 摘掉原消息避免重复）；横幅显示「N 条已排队，恢复后自动发」并可手动重试。
+- 验收（真机）：python/bash/sql/js/json 五种代码块截图确认上色；坏 key 连发两条 → 设置页粘回真实 key → 自动冲刷出两条回复、`outbox.json` 消失；杀进程再正常启动 → 队列自动补发（会话 6 条无重复）。
+- 坑：`winps - < script.ps1` 不会把外部环境变量透传进 PowerShell（`C5_DIR=... winps` 无效），要改路径就得重新生成脚本。
+
