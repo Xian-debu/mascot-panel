@@ -252,15 +252,30 @@ def load_session_store(now: float) -> SessionStore:
     return parse_store("", now)
 
 
+def _rotate_session_backups(path: Path) -> None:
+    """sessions.json → .bak → .bak1 → .bak2，最多留三份上一版。"""
+    chain = [
+        path.with_suffix(".json.bak"),
+        path.with_suffix(".json.bak1"),
+        path.with_suffix(".json.bak2"),
+    ]
+    with contextlib.suppress(OSError):
+        for older, newer in reversed(list(zip(chain[1:], chain, strict=False))):
+            if newer.exists():
+                older.unlink(missing_ok=True)
+                shutil.copy2(newer, older)
+        chain[0].unlink(missing_ok=True)
+        shutil.copy2(path, chain[0])
+
+
 def save_session_store(store: SessionStore) -> None:
     """原子写盘，失败只记日志（聊天记录写不了也不该影响桌宠本体）。"""
     path = _sessions_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.exists() and path.stat().st_size > 2:
-            # 上一版留一份 .bak：真出了坏写/坏解析，用户的对话还能捞回来
-            with contextlib.suppress(OSError):
-                shutil.copy2(path, path.with_suffix(".json.bak"))
+            # 上一版留三份（.bak/.bak1/.bak2）：一次坏写（比如空会话覆盖）不能把对话全带走
+            _rotate_session_backups(path)
         tmp = path.with_suffix(".json.tmp")
         tmp.write_text(dump_store(store), encoding="utf-8")
         tmp.replace(path)
