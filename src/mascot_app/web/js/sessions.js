@@ -243,6 +243,14 @@
         if (ev.key === 'Escape') { box.value = ''; query = ''; results = null; repaint(); }
       });
     }
+    $('export-sess').addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      flash('导出中…');
+      M.api.exportSession('').then(function (res) {
+        if (res && res.ok) flash('已导出 ' + res.name);
+        else flash(res && res.reason === 'EMPTY' ? '空会话，没内容可导' : '导出失败');
+      });
+    });
     $('new-sess').addEventListener('click', function (ev) {
       ev.stopPropagation();
       M.api.newSession().then(function (res) {

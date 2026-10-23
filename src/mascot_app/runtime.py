@@ -16,6 +16,7 @@ import math
 import os
 import re
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -217,6 +218,44 @@ def save_draft(text: str) -> None:
         tmp.replace(path)
     except OSError as exc:
         log.warning("draft: 写入失败 %s: %s", path, exc)
+
+# ---- 导出（C2） ---------------------------------------------------------
+
+EXPORT_DIRNAME = "exports"
+
+
+def _export_dir() -> Path:
+    return _state_dir() / EXPORT_DIRNAME
+
+
+def _slug(title: str) -> str:
+    body = "".join(ch for ch in (title or "") if ch not in '\\/:*?"<>|').strip()
+    return (body or "会话")[:30]
+
+
+def session_markdown(session: msgops.Session, exported_at: float) -> str:
+    """把会话导成 Markdown：标题 + 导出时间 + 每条消息（角色小标题）。"""
+    stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(exported_at))
+    lines = [f"# {session.title or msgops.DEFAULT_TITLE}", "", f"> 导出时间：{stamp}", ""]
+    for msg in session.messages:
+        who = "我" if msg.role == "user" else "天选姬"
+        lines.append(f"### {who}")
+        lines.append("")
+        lines.append(msg.text or "")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def reveal_path(path: Path) -> None:
+    """在资源管理器里选中导出文件（非 Windows 就打开所在目录）。"""
+    try:
+        if sys.platform == "win32":
+            subprocess.Popen(["explorer", "/select,", str(path)])  # noqa: S603,S607
+        else:
+            webbrowser.open(str(path.parent))
+    except OSError as exc:
+        log.warning("export: 打开目录失败 %s: %s", path, exc)
+
 
 
 def load_legacy_history() -> list[Message]:
@@ -502,6 +541,10 @@ class JsApi:
     # 搜索（C1）：标题或正文命中，返回抽屉行格式
     def search_sessions(self, query: str) -> dict[str, Any]:
         return self._rt.search_sessions(query)
+
+    # 导出（C2）：当前会话导成 Markdown
+    def export_session(self, sid: str = "") -> dict[str, Any]:
+        return self._rt.export_session(sid)
 
     # 消息操作（B2）：冻结/折叠/编辑/换版本/上移下移/合并/批量冻结
     def freeze_message(self, msg_id: str) -> dict[str, Any]:
@@ -858,6 +901,28 @@ class Runtime:
         """只读搜索：标题或消息正文命中，结果按最近更新排序。"""
         with self._lock:
             return {"ok": True, "results": self._store.search(query)}
+
+    def export_session(self, sid: str = "") -> dict[str, Any]:
+        """把会话导成 Markdown 存到 <状态目录>/exports/，并在资源管理器里选中。"""
+        with self._lock:
+            session = self._store.find(sid) if sid else self._store.current()
+            if session is None:
+                return {"ok": False, "reason": "NOT_FOUND"}
+            if not session.messages:
+                return {"ok": False, "reason": "EMPTY"}
+            body = session_markdown(session, time.time())
+            title = session.title
+        directory = _export_dir()
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            path = directory / f"{_slug(title)}-{stamp}.md"
+            path.write_text(body, encoding="utf-8")
+        except OSError as exc:
+            log.warning("export: 写入失败 %s", exc)
+            return {"ok": False, "reason": "WRITE"}
+        reveal_path(path)
+        return {"ok": True, "name": path.name, "path": str(path)}
 
     # ---- 消息操作（B2） -----------------------------------------------------
     # 全部按 msg_id 定位；改完立刻落盘（面板下一次快照就能看到新状态）
