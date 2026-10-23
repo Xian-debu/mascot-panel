@@ -2,7 +2,6 @@
 (function () {
   const M = (window.Mascot = window.Mascot || {});
   const $ = function (id) { return document.getElementById(id); };
-  const FOLD_LINES = 12;
   let lastSignature = null;
   let lastArgs = null;
 
@@ -28,55 +27,15 @@
     return (d.getMonth() + 1) + '-' + d.getDate() + ' ' + hm;
   }
 
-  /* 极简 markdown：只认围栏代码块与行内代码，其余按纯文本处理（不 innerHTML）。 */
-  function buildBody(text) {
-    const frag = document.createDocumentFragment();
-    const parts = String(text).split(/```/);
-    parts.forEach(function (part, i) {
-      if (!part) return;
-      if (i % 2 === 1) {
-        const pre = document.createElement('pre');
-        const code = document.createElement('code');
-        code.textContent = part.replace(/^[a-zA-Z0-9_-]+\n/, '');
-        const copy = document.createElement('button');
-        copy.className = 'copy';
-        copy.textContent = '复制';
-        copy.addEventListener('click', function () {
-          navigator.clipboard.writeText(code.textContent || '');
-          copy.textContent = '已复制';
-          setTimeout(function () { copy.textContent = '复制'; }, 1200);
-        });
-        pre.appendChild(copy);
-        pre.appendChild(code);
-        frag.appendChild(pre);
-      } else {
-        part.split(/\n/).forEach(function (line, k) {
-          if (k > 0) frag.appendChild(document.createTextNode('\n'));
-          const chunks = line.split(/`([^`]+)`/);
-          chunks.forEach(function (chunk, j) {
-            if (!chunk) return;
-            if (j % 2 === 1) {
-              const c = document.createElement('code');
-              c.textContent = chunk;
-              frag.appendChild(c);
-            } else {
-              /* **粗体**：合并消息/摘要里的角色标记要用它，别把星号直接露出来 */
-              chunk.split(/\*\*([^*]+)\*\*/).forEach(function (seg, k) {
-                if (!seg) return;
-                if (k % 2 === 1) {
-                  const b = document.createElement('strong');
-                  b.textContent = seg;
-                  frag.appendChild(b);
-                } else {
-                  frag.appendChild(document.createTextNode(seg));
-                }
-              });
-            }
-          });
-        });
-      }
-    });
-    return frag;
+  /* 正文：交给 markdown.js 渲染（Markdown + KaTeX 公式）。
+     这里只保留"没有渲染器时的兜底"，别再往这个文件塞语法 —— 语法全在 markdown.js。 */
+  function buildBody(container, text) {
+    if (M.renderMarkdown) {
+      M.renderMarkdown(container, String(text || ''));
+      return container;
+    }
+    container.textContent = String(text || '');
+    return container;
   }
 
   function messageEl(msg, sameRoleAsPrev) {
@@ -90,21 +49,11 @@
     }
     const body = document.createElement('div');
     body.className = 'body';
-    body.appendChild(buildBody(msg.text || ''));
+    buildBody(body, msg.text || '');
     el.appendChild(body);
 
-    const lines = String(msg.text || '').split('\n').length;
-    if (lines > FOLD_LINES && !msg.collapsed) {
-      el.classList.add('folded');
-      const btn = document.createElement('button');
-      btn.className = 'expand';
-      btn.textContent = '展开全部 ' + lines + ' 行';
-      btn.addEventListener('click', function () {
-        const folded = el.classList.toggle('folded');
-        btn.textContent = folded ? '展开全部 ' + lines + ' 行' : '收起';
-      });
-      el.appendChild(btn);
-    }
+    /* Markdown 渲染后"源码行数"不再是可视行数，自动折叠会把整段吞掉；
+       长消息交给流自己滚动，用户要折叠就用操作条上的折叠按钮（落盘到 msg.collapsed）。 */
     /* B2：消息操作条（复制/折叠/编辑/冻结/版本/上移下移）由 msgops.js 挂上来 */
     if (M.decorateMessage) M.decorateMessage(el, msg);
     return el;
@@ -169,7 +118,7 @@
       el.className = 'msg assistant streaming';
       const body = document.createElement('div');
       body.className = 'body';
-      body.appendChild(buildBody(live));
+      buildBody(body, live);
       const caret = document.createElement('span');
       caret.className = 'caret';
       body.appendChild(caret);

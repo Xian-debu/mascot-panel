@@ -21,6 +21,7 @@
     stop: function () { return M.hasBridge() ? (window.pywebview.api.stop ? window.pywebview.api.stop() : Promise.resolve(null)) : Promise.resolve(null); },
     toBall: function () { return M.hasBridge() ? window.pywebview.api.to_ball() : Promise.resolve(null); },
     toPanel: function () { return M.hasBridge() ? window.pywebview.api.to_panel() : Promise.resolve(null); },
+    openUrl: function (url) { return M.hasBridge() ? window.pywebview.api.open_url(url) : Promise.resolve(null); },
     newSession: function () { return M.hasBridge() ? window.pywebview.api.new_session() : Promise.resolve(null); },
     switchSession: function (sid) { return M.hasBridge() ? window.pywebview.api.switch_session(sid) : Promise.resolve(null); },
     renameSession: function (sid, title) { return M.hasBridge() ? window.pywebview.api.rename_session(sid, title) : Promise.resolve(null); },
