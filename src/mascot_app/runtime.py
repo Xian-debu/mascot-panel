@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from mascot_app import boot
+from mascot_core import sessions as msgops
 from mascot_core.click import DOUBLE, SINGLE, ClickGate
 from mascot_core.config import Settings, load_settings, merge_hot
 from mascot_core.contract import ChatProvider, Message, SendCancelled
@@ -308,6 +309,28 @@ class JsApi:
     def delete_session(self, sid: str) -> dict[str, Any]:
         return self._rt.delete_session(sid)
 
+    # 消息操作（B2）：冻结/折叠/编辑/换版本/上移下移/合并/批量冻结
+    def freeze_message(self, msg_id: str) -> dict[str, Any]:
+        return self._rt.freeze_message(msg_id)
+
+    def bulk_freeze(self, ids: list[str], frozen: bool) -> dict[str, Any]:
+        return self._rt.bulk_freeze(ids, frozen)
+
+    def collapse_message(self, msg_id: str) -> dict[str, Any]:
+        return self._rt.collapse_message(msg_id)
+
+    def edit_message(self, msg_id: str, text: str) -> dict[str, Any]:
+        return self._rt.edit_message(msg_id, text)
+
+    def switch_version(self, msg_id: str) -> dict[str, Any]:
+        return self._rt.switch_version(msg_id)
+
+    def move_message(self, msg_id: str, direction: str) -> dict[str, Any]:
+        return self._rt.move_message(msg_id, direction)
+
+    def merge_messages(self, ids: list[str]) -> dict[str, Any]:
+        return self._rt.merge_messages(ids)
+
 
 # 托盘菜单命令 id（只在进程内使用，不进协议）
 CMD_TO_PANEL = 1001
@@ -515,6 +538,10 @@ class Runtime:
         with self._lock:
             local = list(self._messages)
             merged = merge_history(history, local, limit=self.settings.history_limit)
+            # 后端还回来的消息常常没 id；补上，否则面板操作找不到它
+            for idx, msg in enumerate(merged):
+                if not msg.msg_id:
+                    msg.msg_id = f"h-{time.time_ns()}-{idx}"
             self._messages[:] = merged
         self._persist_sessions()
 
@@ -571,6 +598,63 @@ class Runtime:
         self._persist_sessions()
         return {"ok": True}
 
+    # ---- 消息操作（B2） -----------------------------------------------------
+    # 全部按 msg_id 定位；改完立刻落盘（面板下一次快照就能看到新状态）
+
+    def freeze_message(self, msg_id: str) -> dict[str, Any]:
+        with self._lock:
+            state = msgops.toggle_freeze(self._messages, msg_id)
+        if state is None:
+            return {"ok": False, "reason": "NOT_FOUND"}
+        self._persist_sessions()
+        return {"ok": True, "frozen": state}
+
+    def bulk_freeze(self, ids: list[str], frozen: bool) -> dict[str, Any]:
+        with self._lock:
+            changed = msgops.bulk_freeze(self._messages, list(ids or []), bool(frozen))
+        self._persist_sessions()
+        return {"ok": True, "changed": changed}
+
+    def collapse_message(self, msg_id: str) -> dict[str, Any]:
+        with self._lock:
+            state = msgops.toggle_collapse(self._messages, msg_id)
+        if state is None:
+            return {"ok": False, "reason": "NOT_FOUND"}
+        self._persist_sessions()
+        return {"ok": True, "collapsed": state}
+
+    def edit_message(self, msg_id: str, text: str) -> dict[str, Any]:
+        with self._lock:
+            changed = msgops.edit_message(self._messages, msg_id, text)
+        if not changed:
+            return {"ok": False, "reason": "NO_CHANGE"}
+        self._persist_sessions()
+        return {"ok": True}
+
+    def switch_version(self, msg_id: str) -> dict[str, Any]:
+        with self._lock:
+            changed = msgops.switch_version(self._messages, msg_id)
+        if not changed:
+            return {"ok": False, "reason": "NO_VERSION"}
+        self._persist_sessions()
+        return {"ok": True}
+
+    def move_message(self, msg_id: str, direction: str) -> dict[str, Any]:
+        with self._lock:
+            changed = msgops.move_message(self._messages, msg_id, direction)
+        if not changed:
+            return {"ok": False, "reason": "NO_MOVE"}
+        self._persist_sessions()
+        return {"ok": True}
+
+    def merge_messages(self, ids: list[str]) -> dict[str, Any]:
+        with self._lock:
+            index = msgops.merge_messages(self._messages, list(ids or []))
+        if index is None:
+            return {"ok": False, "reason": "NEED_TWO"}
+        self._persist_sessions()
+        return {"ok": True, "index": index}
+
     def clear_history(self) -> None:
         """清空当前会话的对话（下一次写盘即落定），其它会话不受影响。
 
@@ -598,7 +682,7 @@ class Runtime:
                         role="user",
                         text=text,
                         ts=time.time(),
-                        msg_id=f"local-{self._store.current_id}-{len(self._messages)}",
+                        msg_id=f"local-{self._store.current_id}-{time.time_ns()}",
                     )
                 )
                 self._sending = True
@@ -608,6 +692,9 @@ class Runtime:
             try:
                 reply = self._send_streaming(text)
                 if reply.role == "assistant" and reply.text:
+                    if not reply.msg_id:
+                        # 消息操作全靠 id 定位：provider 没给 id 的回复自己补一个
+                        reply.msg_id = f"ai-{time.time_ns()}"
                     with self._lock:
                         self._messages.append(reply)
                     self._mark_alert()
@@ -647,7 +734,8 @@ class Runtime:
         setter = getattr(self.provider, "set_context", None)
         if callable(setter):
             with self._lock:
-                context = list(self._messages)
+                # 冻结 = 这条不发给 AI（旧版语义）：进上下文前过滤掉
+                context = [m for m in self._messages if not m.frozen]
             setter(context)
         if callable(stream):
             return stream(text, self._on_delta)  # type: ignore[no-any-return]
