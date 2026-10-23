@@ -25,8 +25,9 @@ from mascot_core.click import DOUBLE, SINGLE, ClickGate
 from mascot_core.config import Settings, load_settings, merge_hot
 from mascot_core.contract import ChatProvider, Message, SendCancelled
 from mascot_core.geometry import Rect, Screen, angle_for_time, follow_rect, orbit_layout
-from mascot_core.history import dump_history, filter_cleared, merge_history, parse_history
+from mascot_core.history import filter_cleared, merge_history, parse_history
 from mascot_core.paths import state_dir
+from mascot_core.sessions import SessionStore, dump_store, from_history, parse_store
 from mascot_core.state import (
     CLEAR_DEGRADED,
     HIDE_BALL,
@@ -114,11 +115,7 @@ def load_flags() -> dict[str, bool]:
 def load_ball_pos() -> tuple[int, int] | None:
     """上次拖到的待机球位置；坏数据当没有。"""
     value = _read_runtime().get("ball_pos")
-    if (
-        isinstance(value, list)
-        and len(value) == 2
-        and all(isinstance(v, int) for v in value)
-    ):
+    if isinstance(value, list) and len(value) == 2 and all(isinstance(v, int) for v in value):
         return int(value[0]), int(value[1])
     return None
 
@@ -135,11 +132,7 @@ def save_ball_pos(pos: tuple[int, int] | None) -> None:
 
 def _load_pos(key: str) -> tuple[int, int] | None:
     value = _read_runtime().get(key)
-    if (
-        isinstance(value, list)
-        and len(value) == 2
-        and all(isinstance(v, int) for v in value)
-    ):
+    if isinstance(value, list) and len(value) == 2 and all(isinstance(v, int) for v in value):
         return int(value[0]), int(value[1])
     return None
 
@@ -180,12 +173,17 @@ def save_flags(*, dnd: bool, paused: bool) -> None:
     _write_runtime(raw)
 
 
+def _sessions_path() -> Path:
+    return _state_dir() / "sessions.json"
+
+
 def _history_path() -> Path:
+    """旧版单会话文件：只读，一次性迁移到 sessions.json。"""
     return _state_dir() / "history.json"
 
 
-def load_local_history() -> list[Message]:
-    """上次退出时面板里的对话；文件坏了当空，绝不因此启动失败。"""
+def load_legacy_history() -> list[Message]:
+    """旧版 history.json 里的对话；文件坏了当空，绝不因此启动失败。"""
     try:
         raw = _history_path().read_text(encoding="utf-8")
     except OSError:
@@ -193,16 +191,40 @@ def load_local_history() -> list[Message]:
     return parse_history(raw)
 
 
-def save_local_history(messages: list[Message], limit: int = 50) -> None:
+def load_session_store(now: float) -> SessionStore:
+    """会话数据来源：sessions.json > （缺失/坏掉时）迁移旧 history.json > 空白会话。
+
+    迁移是单向的：sessions.json 一旦存在就是唯一真源，history.json 不再参与，
+    否则"用户清空的旧消息"会因为旧文件还在而重新复活。
+    """
+    try:
+        raw = _sessions_path().read_text(encoding="utf-8")
+    except OSError:
+        raw = ""
+    if raw.strip():
+        try:
+            json.loads(raw)
+        except ValueError:
+            log.warning("sessions: 文件损坏，改从 history.json 迁移")
+        else:
+            return parse_store(raw, now)
+    legacy = load_legacy_history()
+    if legacy:
+        log.info("sessions: 从 history.json 迁移 %d 条消息", len(legacy))
+        return from_history(legacy, now)
+    return parse_store("", now)
+
+
+def save_session_store(store: SessionStore) -> None:
     """原子写盘，失败只记日志（聊天记录写不了也不该影响桌宠本体）。"""
-    path = _history_path()
+    path = _sessions_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".json.tmp")
-        tmp.write_text(dump_history(messages[-limit:]), encoding="utf-8")
+        tmp.write_text(dump_store(store), encoding="utf-8")
         tmp.replace(path)
     except OSError as exc:
-        log.warning("history: 写入失败 %s: %s", path, exc)
+        log.warning("sessions: 写入失败 %s: %s", path, exc)
 
 
 TOKENS_PLACEHOLDER = "/*__TOKENS__*/"
@@ -273,6 +295,18 @@ class JsApi:
     def stop(self) -> dict[str, Any]:
         return {"ok": self._rt.cancel_send()}
 
+    # 会话抽屉（B1）：新建/切换/重命名/删除后 JS 继续轮询快照拿新列表
+    def new_session(self) -> dict[str, Any]:
+        return self._rt.new_session()
+
+    def switch_session(self, sid: str) -> dict[str, Any]:
+        return self._rt.switch_session(sid)
+
+    def rename_session(self, sid: str, title: str) -> dict[str, Any]:
+        return self._rt.rename_session(sid, title)
+
+    def delete_session(self, sid: str) -> dict[str, Any]:
+        return self._rt.delete_session(sid)
 
 
 # 托盘菜单命令 id（只在进程内使用，不进协议）
@@ -301,6 +335,7 @@ def _autostart_enabled() -> bool:
         return autostart.is_enabled()
     except Exception:
         return False
+
 
 class Runtime:
     """一个进程一份：面板 + 球 + 状态机。"""
@@ -349,8 +384,8 @@ class Runtime:
         self._degraded = False
         self._error: str = ""
         self._provider_detail: str = ""
-        # 先挂上本次运行前落盘的对话，后端历史稍后由 _load_history 合并进来
-        self._messages: list[Message] = load_local_history()
+        # 先挂上本次运行前落盘的多会话数据，后端历史稍后由 _load_history 合并进当前会话
+        self._store = load_session_store(time.time())
         self._sending = False
         self._send_queue: list[str] = []
         self._stream_text = ""
@@ -378,6 +413,11 @@ class Runtime:
         self._commands: list[str] = []
         self._tray: Any = None
 
+    @property
+    def _messages(self) -> list[Message]:
+        """当前会话的消息列表（与 store 持有同一个 list，追加即生效）。"""
+        return self._store.current().messages
+
     # ---- 状态读取（JS 轮询） -------------------------------------------------
 
     def snapshot(self) -> dict[str, Any]:
@@ -401,7 +441,11 @@ class Runtime:
                 "alert": self._alert_active(),
                 "dnd": self._dnd,
                 "autostart": _autostart_enabled(),
-                "messages": [m.to_dict() for m in self._messages[-self.settings.history_limit:]],
+                "messages": [m.to_dict() for m in self._messages[-self.settings.history_limit :]],
+                # 会话抽屉：只给摘要，不给每个会话的正文（快照不随会话数膨胀）
+                "sessions": self._store.summaries(),
+                "current_session": self._store.current_id,
+                "current_title": self._store.current().title,
                 "settings": {
                     "fps": self.settings.fps,
                     "history_limit": self.settings.history_limit,
@@ -470,42 +514,92 @@ class Runtime:
         history = filter_cleared(history, self._cleared_ids)
         with self._lock:
             local = list(self._messages)
-            self._messages = merge_history(history, local, limit=self.settings.history_limit)
-        self._persist_history()
+            merged = merge_history(history, local, limit=self.settings.history_limit)
+            self._messages[:] = merged
+        self._persist_sessions()
 
-    def _persist_history(self) -> None:
+    def _persist_sessions(self) -> None:
         limit = self.settings.history_limit
         with self._lock:
-            # 内存也别无上限地长：盘上只留 limit 条，内存同样只留 limit 条
-            if len(self._messages) > limit:
-                self._messages = self._messages[-limit:]
-            messages = list(self._messages)
-        save_local_history(messages, limit=limit)
+            # 内存也别无上限地长：每个会话盘上只留 limit 条，内存同样只留 limit 条
+            messages = self._store.current().messages
+            if len(messages) > limit:
+                messages[:] = messages[-limit:]
+            self._store.touch(time.time())
+            store = self._store
+        save_session_store(store)
         # 顺手刷新 state.json：`ctl status` 才看得到新消息（面板自己走 JS API，不依赖它）
         self._write_state()
 
+    # ---- 会话抽屉（B1） -----------------------------------------------------
+
+    def _chat_busy(self) -> bool:
+        """收发中途不许切会话：流式文本和队列都属于当前会话。"""
+        return self._sending or self._stream_active or bool(self._send_queue)
+
+    def new_session(self) -> dict[str, Any]:
+        with self._lock:
+            if self._chat_busy():
+                return {"ok": False, "reason": "BUSY"}
+            session = self._store.create(time.time())
+        self._persist_sessions()
+        return {"ok": True, "id": session.sid}
+
+    def switch_session(self, sid: str) -> dict[str, Any]:
+        with self._lock:
+            if self._chat_busy():
+                return {"ok": False, "reason": "BUSY"}
+            if not self._store.switch(sid):
+                return {"ok": False, "reason": "NOT_FOUND"}
+        self._persist_sessions()
+        return {"ok": True}
+
+    def rename_session(self, sid: str, title: str) -> dict[str, Any]:
+        with self._lock:
+            if not self._store.rename(sid, title):
+                return {"ok": False, "reason": "INVALID"}
+        self._persist_sessions()
+        return {"ok": True}
+
+    def delete_session(self, sid: str) -> dict[str, Any]:
+        with self._lock:
+            if self._chat_busy():
+                return {"ok": False, "reason": "BUSY"}
+            if self._store.find(sid) is None:
+                return {"ok": False, "reason": "NOT_FOUND"}
+            self._store.delete(sid, time.time())
+        self._persist_sessions()
+        return {"ok": True}
+
     def clear_history(self) -> None:
-        """清空面板里的对话（落盘文件一起清），下次启动不会再出现。
+        """清空当前会话的对话（下一次写盘即落定），其它会话不受影响。
 
         后端 history 是另一回事：它会把旧消息再还回来。这里记下被清消息的 id，
         `_load_history` 合并前按 id 过滤，避免「清完重启又复活」。
         """
         with self._lock:
-            cleared = {m.msg_id for m in self._messages if m.msg_id}
-            self._messages = []
+            messages = self._store.current().messages
+            cleared = {m.msg_id for m in messages if m.msg_id}
+            messages.clear()
         if cleared:
             self._cleared_ids |= cleared
             save_cleared_ids(self._cleared_ids)
-        save_local_history([])
-        self._write_state()
+        self._persist_sessions()
 
     def _drain_sends(self) -> None:
         with self._lock:
             queue, self._send_queue = self._send_queue, []
         for text in queue:
             with self._lock:
+                # 第一条用户消息顺手当会话标题（用户改过名就不再覆盖）
+                self._store.title_from(text)
                 self._messages.append(
-                    Message(role="user", text=text, ts=time.time(), msg_id=f"local-{len(self._messages)}")
+                    Message(
+                        role="user",
+                        text=text,
+                        ts=time.time(),
+                        msg_id=f"local-{self._store.current_id}-{len(self._messages)}",
+                    )
                 )
                 self._sending = True
                 self._stream_text = ""
@@ -544,7 +638,7 @@ class Runtime:
                     self._sending = False
                     self._stream_active = False
                     self._stream_text = ""
-                self._persist_history()
+                self._persist_sessions()
 
     def _send_streaming(self, text: str) -> Message:
         """有 send_stream 就用流式（面板能看到逐字增长），否则退回一次性 send。"""
@@ -668,10 +762,10 @@ class Runtime:
         trimmed = len(self._messages) > self.settings.history_limit
         if trimmed:
             with self._lock:
-                self._messages = self._messages[-self.settings.history_limit:]
+                self._messages[:] = self._messages[-self.settings.history_limit :]
         log.info("config reloaded (hot fields applied); restart required: %s", restart or "none")
         if trimmed:
-            self._persist_history()
+            self._persist_sessions()
         self._write_state()
 
     def _poll_control(self) -> None:
@@ -893,9 +987,7 @@ class Runtime:
         if not hwnd:
             return
         scale = win32.window_dpi(hwnd) / 96.0
-        win32.move_window(
-            hwnd, int(round(logical_x * scale)), int(round(logical_y * scale))
-        )
+        win32.move_window(hwnd, int(round(logical_x * scale)), int(round(logical_y * scale)))
 
     def _place_panel(self, *, force: bool = False) -> None:
         from mascot_win import win32
@@ -950,7 +1042,9 @@ class Runtime:
                 self._last_panel_rect = rect
             return
         # 用宠物所在显示器的可用工作区（排除任务栏）；主屏尺寸会把面板从副屏拽回来
-        wx, wy, ww, wh = win32.work_area(self._pet.x + self._pet.w // 2, self._pet.y + self._pet.h // 2)
+        wx, wy, ww, wh = win32.work_area(
+            self._pet.x + self._pet.w // 2, self._pet.y + self._pet.h // 2
+        )
         rect = follow_rect(
             Rect(self._pet.x, self._pet.y, self._pet.w, self._pet.h),
             self.settings.follow_offset,
@@ -1139,7 +1233,6 @@ class Runtime:
                 self._tray = None
                 self._ball.destroy()
             self._ball = None
-
 
     # ---- 托盘 ---------------------------------------------------------------
 
