@@ -1,0 +1,63 @@
+/* 消息操作条（B2）：悬停出现；冻结/折叠有常驻视觉标记；就地编辑。 */
+.msg{position:relative;}
+.msg .acts{position:absolute;top:-9px;right:6px;display:flex;gap:1px;align-items:center;white-space:nowrap;
+  padding:2px 3px;border-radius:7px;background:var(--card-solid,rgba(12,22,36,.95));
+  border:1px solid var(--accent-line);box-shadow:0 2px 8px rgba(0,0,0,.35);
+  opacity:0;pointer-events:none;transition:opacity var(--fast);z-index:3;}
+.msg:hover .acts{opacity:1;pointer-events:auto;}
+.msg .act{background:none;border:0;color:var(--text-dim);font-family:inherit;
+  font-size:var(--fs-11);line-height:1;padding:4px 4px;border-radius:4px;cursor:pointer;}
+.msg .act:hover{background:var(--accent-soft);color:var(--accent);}
+
+.msg.frozen .body{opacity:.55;}
+.msg .msg-flag{position:absolute;left:var(--s2);top:-7px;font-size:var(--fs-10,10px);
+  color:var(--accent);background:var(--card-solid,rgba(12,22,36,.95));
+  border:1px solid var(--accent-line);border-radius:6px;padding:0 4px;
+  pointer-events:none;}
+.msg.collapsed .body{max-height:calc(var(--fs-13) * 1.6);overflow:hidden;
+  mask-image:linear-gradient(black 55%,transparent);}
+
+.msg.editing{max-width:100%;align-self:stretch;}
+.msg.editing .body{max-height:none;overflow:visible;mask-image:none;-webkit-mask-image:none;}
+.msg .edit-box{width:100%;box-sizing:border-box;resize:vertical;min-height:64px;
+  background:var(--bg);color:var(--text);border:1px solid var(--accent-line);
+  border-radius:var(--r-card);padding:var(--s2);font-family:inherit;
+  font-size:var(--fs-13);line-height:1.6;outline:none;}
+.msg .edit-row{display:flex;gap:var(--s2);align-items:center;margin-top:var(--s2);}
+.msg .edit-row .act{border:1px solid var(--border);padding:3px 10px;}
+.msg .edit-hint{font-size:var(--fs-11);color:var(--text-muted);margin-left:auto;}
+
+.msg .acts{white-space:nowrap;}
+.msg .act{white-space:nowrap;}
+.msg.editing .acts{display:none;}
+
+/* 多选（B2）：点消息切换选中，浮动条在输入框上方 */
+.msg.selmode{cursor:pointer;}
+.msg.selmode:hover{border-color:var(--accent-line);}
+.msg.selmode.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+.msg .sel-box{position:absolute;left:-9px;top:-9px;width:14px;height:14px;border-radius:4px;
+  border:1px solid var(--accent-line);background:var(--card-solid,rgba(12,22,36,.95));}
+.msg.sel .sel-box{background:var(--accent);border-color:var(--accent);}
+.msg.sel .sel-box::after{content:'';position:absolute;left:4px;top:1px;width:4px;height:8px;
+  border:solid var(--bg);border-width:0 2px 2px 0;transform:rotate(45deg);}
+
+.selbar{display:flex;gap:var(--s2);align-items:center;padding:var(--s2) var(--s3);
+  border-top:1px solid var(--border);background:var(--card-solid,rgba(12,22,36,.95));}
+.selbar[hidden]{display:none;}
+.selbar .sel-act{margin-left:0;background:none;border:1px solid var(--border);color:var(--text);
+  font-family:inherit;font-size:var(--fs-11);line-height:1;padding:4px 8px;border-radius:6px;cursor:pointer;}
+.selbar .sel-act:hover:not(:disabled){border-color:var(--accent-line);color:var(--accent);}
+.selbar .sel-act:disabled{opacity:.4;cursor:default;}
+.selbar .sel-count{margin-right:auto;}
+
+/* 图标按钮（B2）：14px SVG + tooltip；版本按钮挂数字角标 */
+.msg .act{display:inline-flex;align-items:center;justify-content:center;padding:3px 3px;position:relative;}
+.msg .act svg{display:block;}
+.msg .act-num{position:absolute;right:-1px;bottom:-1px;font-size:9px;line-height:1;
+  color:var(--accent);background:var(--card-solid,rgba(12,22,36,.95));border-radius:3px;padding:0 1px;}
+.msg .act-ok{color:var(--accent);}
+.msg .act-grip{cursor:grab;color:var(--text-muted);}
+.msg .act-grip:active{cursor:grabbing;}
+.msg.dragging{opacity:.35;}
+.msg.drop-before{box-shadow:inset 0 2px 0 var(--accent);}
+.msg.drop-after{box-shadow:inset 0 -2px 0 var(--accent);}

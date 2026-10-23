@@ -4,8 +4,17 @@
   const $ = function (id) { return document.getElementById(id); };
   const FOLD_LINES = 12;
   let lastSignature = null;
+  let lastArgs = null;
 
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+  /* 便宜的字符串指纹：消息正文可能很长，签名里只放哈希（编辑后长度不变也能重绘）。 */
+  function hash(s) {
+    let h = 5381;
+    const str = String(s || '');
+    for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    return h;
+  }
 
   function bucketLabel(ts) {
     const d = new Date(ts * 1000);
@@ -51,7 +60,17 @@
               c.textContent = chunk;
               frag.appendChild(c);
             } else {
-              frag.appendChild(document.createTextNode(chunk));
+              /* **粗体**：合并消息/摘要里的角色标记要用它，别把星号直接露出来 */
+              chunk.split(/\*\*([^*]+)\*\*/).forEach(function (seg, k) {
+                if (!seg) return;
+                if (k % 2 === 1) {
+                  const b = document.createElement('strong');
+                  b.textContent = seg;
+                  frag.appendChild(b);
+                } else {
+                  frag.appendChild(document.createTextNode(seg));
+                }
+              });
             }
           });
         });
@@ -75,7 +94,7 @@
     el.appendChild(body);
 
     const lines = String(msg.text || '').split('\n').length;
-    if (lines > FOLD_LINES) {
+    if (lines > FOLD_LINES && !msg.collapsed) {
       el.classList.add('folded');
       const btn = document.createElement('button');
       btn.className = 'expand';
@@ -86,13 +105,24 @@
       });
       el.appendChild(btn);
     }
+    /* B2：消息操作条（复制/折叠/编辑/冻结/版本/上移下移）由 msgops.js 挂上来 */
+    if (M.decorateMessage) M.decorateMessage(el, msg);
     return el;
   }
 
-  M.renderMessages = function (messages, streaming, sessionId) {
+  M.renderMessages = function (messages, streaming, sessionId, force) {
+    lastArgs = [messages, streaming, sessionId];
+    if (!force && M.isEditing && M.isEditing()) {
+      /* 就地编辑中不重绘：正在敲的字不能被下一次快照清掉；保存/取消后 refreshMessages */
+      lastSignature = null;
+      return;
+    }
     const list = messages || [];
     const live = streaming && streaming.active ? String(streaming.text || '') : '';
-    const signature = (sessionId || '') + '#' + list.map(function (m) { return (m.id || '') + ':' + (m.text || '').length + ':' + (m.pending ? 1 : 0); }).join('|') + '#' + live.length;
+    const signature = (sessionId || '') + '#' + list.map(function (m) {
+      return (m.id || '') + ':' + hash(m.text) + ':' + (m.pending ? 1 : 0) + ':' +
+        (m.frozen ? 1 : 0) + ':' + (m.collapsed ? 1 : 0) + ':' + (m.versions || 0);
+    }).join('|') + '#' + live.length + ':' + hash(live) + '#' + ((M.selectionSig && M.selectionSig()) || '');
     if (signature === lastSignature) return;
     lastSignature = signature;
 
@@ -160,5 +190,15 @@
     }
 
     if (atBottom) stream.scrollTop = stream.scrollHeight;
+    /* 多选浮动条等"依附于消息列表"的 UI，在每次重绘后同步一次 */
+    if (M.afterRender) M.afterRender();
+  };
+
+  /* 本地状态变了（选中/编辑/操作回执）立刻重绘一次，不必等下一轮轮询。 */
+  M.refreshMessages = function () {
+    if (!lastArgs) return;
+    lastSignature = null;
+    /* force：编辑态也要能重绘，否则 startEdit 一按就再也画不出编辑框 */
+    M.renderMessages(lastArgs[0], lastArgs[1], lastArgs[2], true);
   };
 })();

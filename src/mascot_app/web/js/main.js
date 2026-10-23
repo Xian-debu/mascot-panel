@@ -33,6 +33,7 @@
 
     M.mountClock($('avatar'), function () { M.api.toBall(); });
     M.initSessions();
+    if (M.initDragTail) M.initDragTail();
 
     M.startPolling(apply);
   }

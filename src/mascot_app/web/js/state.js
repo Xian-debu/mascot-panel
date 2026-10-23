@@ -25,6 +25,16 @@
     switchSession: function (sid) { return M.hasBridge() ? window.pywebview.api.switch_session(sid) : Promise.resolve(null); },
     renameSession: function (sid, title) { return M.hasBridge() ? window.pywebview.api.rename_session(sid, title) : Promise.resolve(null); },
     deleteSession: function (sid) { return M.hasBridge() ? window.pywebview.api.delete_session(sid) : Promise.resolve(null); },
+    /* 消息操作（B2）：全部按 msg_id 定位 */
+    freezeMessage: function (id) { return M.hasBridge() ? window.pywebview.api.freeze_message(id) : Promise.resolve(null); },
+    bulkFreeze: function (ids, frozen) { return M.hasBridge() ? window.pywebview.api.bulk_freeze(ids, frozen) : Promise.resolve(null); },
+    collapseMessage: function (id) { return M.hasBridge() ? window.pywebview.api.collapse_message(id) : Promise.resolve(null); },
+    editMessage: function (id, text) { return M.hasBridge() ? window.pywebview.api.edit_message(id, text) : Promise.resolve(null); },
+    switchVersion: function (id) { return M.hasBridge() ? window.pywebview.api.switch_version(id) : Promise.resolve(null); },
+    moveMessage: function (id, dir) { return M.hasBridge() ? window.pywebview.api.move_message(id, dir) : Promise.resolve(null); },
+    mergeMessages: function (ids) { return M.hasBridge() ? window.pywebview.api.merge_messages(ids) : Promise.resolve(null); },
+    summarize: function (ids) { return M.hasBridge() ? window.pywebview.api.summarize(ids) : Promise.resolve(null); },
+    reorder: function (id, index) { return M.hasBridge() ? window.pywebview.api.reorder(id, index) : Promise.resolve(null); },
   };
 
   /* 轮询快照：M2 定下的单向通道（Python 从不反调 JS）。 */
