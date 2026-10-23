@@ -13,16 +13,21 @@
     $('state').textContent = LABEL[state] || state;
     $('state').title = snap.reason || '';
 
+    const pending = snap.outbox || 0;
     let banner = '';
     if (snap.degraded) {
       banner = snap.provider_detail
         ? '后端不可达（' + snap.provider_detail + '），消息暂时发不出去，其它功能正常'
         : '后端不可达，消息暂时无法收发（离线可用）';
+      if (pending) { banner += ' · ' + pending + ' 条已排队，恢复后自动发'; }
     } else if (snap.error) {
       banner = '出错了：' + snap.error;
+      if (pending) { banner += ' · ' + pending + ' 条已排队'; }
+    } else if (pending) {
+      banner = pending + ' 条消息还没发出去，网络恢复后会自动重发';
     }
     const el = $('banner');
-    const sig = banner + '|' + (snap.retry_available ? '1' : '0');
+    const sig = banner + '|' + (pending ? String(pending) : '0');
     if (el.dataset.sig !== sig) {
       el.dataset.sig = sig;
       el.textContent = '';
@@ -32,11 +37,11 @@
         text.textContent = banner;
         el.appendChild(text);
       }
-      if (banner && snap.retry_available) {
+      if (banner && pending) {
         const again = document.createElement('button');
         again.className = 'banner-retry';
         again.textContent = '重试';
-        again.title = '把刚才那条消息再发一次';
+        again.title = '立刻重发队列里的消息（网络恢复后也会自动发）';
         again.addEventListener('click', function (ev) {
           ev.stopPropagation();
           M.api.retrySend();

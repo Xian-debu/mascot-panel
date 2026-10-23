@@ -203,6 +203,64 @@ def _draft_path() -> Path:
 
 MAX_DRAFT = 4000
 
+# 离线待发队列：发送失败的消息落盘，网络恢复后自动重发（面板横幅可手动触发）。
+MAX_OUTBOX = 50
+OUTBOX_RETRY_GAP_S = 30.0
+
+
+def _outbox_path() -> Path:
+    return _state_dir() / "outbox.json"
+
+
+def load_outbox() -> list[dict[str, Any]]:
+    """读待发队列；坏文件当空队列处理，绝不因为队列损坏而挡住启动。"""
+    path = _outbox_path()
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return []
+    items = data.get("items") if isinstance(data, dict) else None
+    out: list[dict[str, Any]] = []
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            text = item.get("text")
+            if not isinstance(text, str) or not text.strip():
+                continue
+            mid = item.get("id")
+            ts = item.get("ts")
+            out.append(
+                {
+                    "id": mid if isinstance(mid, str) else "",
+                    "text": text,
+                    "ts": float(ts) if isinstance(ts, (int, float)) else 0.0,
+                }
+            )
+    return out[-MAX_OUTBOX:]
+
+
+def save_outbox(items: list[dict[str, Any]]) -> None:
+    """原子写；队列为空就把文件删掉，别留空壳。"""
+    path = _outbox_path()
+    try:
+        if items:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".json.tmp")
+            tmp.write_text(
+                json.dumps({"version": 1, "items": items}, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            os.replace(tmp, path)
+        elif path.exists():
+            path.unlink()
+    except OSError as exc:
+        log.warning("outbox_write_failed: %s", exc)
+
 
 def load_draft() -> str:
     try:
@@ -691,6 +749,8 @@ class Runtime:
         self._error: str = ""
         self._failed_text: str = ""
         self._failed_msg_id: str = ""
+        self._outbox: list[dict[str, Any]] = load_outbox()
+        self._outbox_next: float = 0.0
         self._provider_detail: str = ""
         # 先挂上本次运行前落盘的多会话数据，后端历史稍后由 _load_history 合并进当前会话
         self._store = load_session_store(time.time())
@@ -744,7 +804,8 @@ class Runtime:
                 "uptime_s": round(time.monotonic() - self._started, 1),
                 "error": self._error,
                 "provider_detail": self._provider_detail,
-                "retry_available": bool(self._failed_text),
+                "retry_available": bool(self._outbox),
+                "outbox": len(self._outbox),
                 "sending": self._sending,
                 "summarizing": self._summarizing,
                 "streaming": {"active": self._stream_active, "text": self._stream_text},
@@ -864,22 +925,46 @@ class Runtime:
             self._cancel.set()
         return active
 
-    def retry_send(self) -> dict[str, Any]:
-        """重发上一条失败的用户消息：先把它从会话里摘掉，避免重试后出现两条一样的。"""
+    def _queue_offline(self, text: str, msg_id: str) -> None:
+        """把没发出去的消息记进待发队列并落盘（去重：同一条文本只排一次）。"""
         with self._lock:
-            text = self._failed_text
-            if not text:
+            if any(item.get("text") == text for item in self._outbox):
+                return
+            self._outbox.append({"id": msg_id, "text": text, "ts": time.time()})
+            if len(self._outbox) > MAX_OUTBOX:
+                self._outbox = self._outbox[-MAX_OUTBOX:]
+            items = [dict(item) for item in self._outbox]
+        save_outbox(items)
+
+    def retry_send(self) -> dict[str, Any]:
+        """把待发队列里的消息全部重发。
+
+        先从会话里摘掉对应的那条用户消息（免得重发后出现两条一样的），再按原顺序入队。
+        手动点横幅「重试」走这里；后端健康探测发现恢复时也自动走这里。
+        """
+        with self._lock:
+            items = list(self._outbox)
+            if not items:
                 return {"ok": False, "reason": "NOTHING"}
-            msg_id = self._failed_msg_id
-            idx = msgops.find_index(self._messages, msg_id) if msg_id else None
-            if idx is not None:
-                del self._messages[idx]
+            texts: list[str] = []
+            for item in items:
+                msg_id = str(item.get("id") or "")
+                idx = msgops.find_index(self._messages, msg_id) if msg_id else None
+                if idx is not None:
+                    del self._messages[idx]
+                text = str(item.get("text") or "")
+                if text:
+                    texts.append(text)
+            self._outbox = []
             self._failed_text = ""
             self._failed_msg_id = ""
             self._error = ""
-            self._send_queue.append(text)
+            self._cancel.clear()
+            for text in texts:
+                self._send_queue.append(text)
+        save_outbox([])
         self._persist_sessions()
-        return {"ok": True}
+        return {"ok": True, "count": len(texts)}
 
     def _on_delta(self, piece: str) -> None:
         """provider 每收到一个分片调一次。持锁追加，取消时抛 SendCancelled 中止读取。"""
@@ -1221,6 +1306,9 @@ class Runtime:
                 # 记住这条没发出去的用户消息（原文 + id），面板上给「重试」
                 self._failed_text = text
                 self._failed_msg_id = sent.msg_id
+                self._queue_offline(text, sent.msg_id)
+                # 刚失败过就先等一会儿再自动重发，别每 5s 撞一次 401
+                self._outbox_next = time.monotonic() + OUTBOX_RETRY_GAP_S
                 self.post(Event.PROVIDER_DOWN)
             finally:
                 with self._lock:
@@ -1988,6 +2076,19 @@ class Runtime:
             self._provider_detail = ""
             if self._degraded:
                 self.post(Event.PROVIDER_READY)
+            self._flush_outbox()
+
+    def _flush_outbox(self) -> None:
+        """后端健康且闲着 → 自动重发待发队列。失败会自动回队并顺延下次尝试。"""
+        if not self._outbox:
+            return
+        if time.monotonic() < self._outbox_next:
+            return
+        if self._chat_busy():
+            return
+        result = self.retry_send()
+        if result.get("ok"):
+            log.info("outbox_flushed: %s", result.get("count"))
 
     # ---- 入口 ---------------------------------------------------------------
 
