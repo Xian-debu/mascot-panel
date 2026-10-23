@@ -696,3 +696,17 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 - 未做：会话搜索、删除回收站、抽屉分页（现全列、超出滚动）。
 
 
+
+### M37 / B2 消息操作（2026-10-23，用户 m00718 授权，m01245 改图标+拖动）
+
+- 由来：原版 pet-overlay 的消息操作条（复制/编辑/版本/冻结/折叠/上下移）是「能改历史」的核心能力，B1 只有会话抽屉。详见 `docs/51-message-ops.md`。
+- 改法：
+  - `contract.py`：`Message` 去掉 frozen dataclass，增加 `frozen / collapsed / history`；`to_dict` 只在非空时输出，带 `versions` 计数。
+  - `sessions.py`：新增 `find_index / toggle_freeze / bulk_freeze / toggle_collapse / edit_message / switch_version / move_message / move_to / merge_messages`（全部纯逻辑，`history` 上限 10 版）。
+  - `runtime.py`：冻结消息不进模型上下文；桥接 `freeze_message / bulk_freeze / collapse_message / edit_message / switch_version / move_message / merge_messages / reorder / summarize`；总结在后台线程调 DeepSeek，`snapshot.summarizing` 供前端显示；发消息时给无 id 的回复补 `ai-<ns>`，本地用户消息 id 改 `local-<sid>-<ns>`（合并后 len 会撞）。
+  - `providers/deepseek.py`：`complete(system, user)` 非流式摘要接口。
+  - 面板：操作条改 14px 线性图标（复制/折叠/编辑/冻结/↩N/拖动把手/勾选）；**上下移改成拖动**（按住把手拖到目标消息上方或下方，落点画高亮线，拖到空白处=移到末尾）；多选态左侧勾选框 + 底部选区条（冻结/解冻/合并/总结/取消）；`buildBody` 支持 `**粗体**`。
+- 验收（真机，开发副本 + `MASCOT_STATE_DIR=C:/Users/Public/mascot-b2state`）：冻结落盘 + 角标 + 重启保持；折叠一行；编辑后旧正文进 history、版本 ↩1 可来回切；拖动第一条到第二下方 → `sessions.json` 顺序变了且界面即时跟随；多选 3 条合并成一条 assistant（三段带角色前缀）；多选 2 条总结 → DeepSeek 返回摘要替换选中项。
+- 坑：①`renderMessages` 的「编辑中不重绘」闸门必须能被 `refreshMessages(force)` 绕过，否则一次误点编辑就让所有刷新停摆；②编辑框会被 `.msg.collapsed .body` 裁成一条线；③两字按钮在窄气泡里会竖排，图标化后消失；④合并/摘要里的 `**粗体**` 必须有渲染，否则满屏星号；⑤改 web 资源后必须 deploy + venv `--force-reinstall`（venv 是拷贝安装），否则 site-packages 里还是旧 JS。
+- 未做：总结不可取消、合并/总结/删除没有撤销、选区条窄窗换行。
+
