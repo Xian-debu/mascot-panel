@@ -17,11 +17,12 @@
 ### 2. 装（下载版）
 
 ```powershell
-# 1) 把 release 里的 mascot-0.1.0.exe 放到任意目录（例如 D:\apps\mascot\）
-# 2) 首次运行：双击它，或在 PowerShell 里：
-.\mascot-0.1.0.exe            # 无参数 = GUI 启动
+# 1) 把 release 里的 mascot-0.1.1-win64.zip 解压到任意目录（例如 D:\apps\mascot\）
+#    exe 需要和 _internal\ 同目录，不能单独拷走
+# 2) 首次运行：双击 mascot.exe，或在 PowerShell 里：
+.\mascot.exe                  # 无参数 = GUI 启动
 # 3) 想开机自启：
-.\mascot-0.1.0.exe autostart on
+.\mascot.exe autostart on
 ```
 
 首次启动后会出现：
@@ -42,8 +43,8 @@ bash scripts/install-win.sh
 
 ```
 %LOCALAPPDATA%\mascot\
-├─ app\0.1.0\mascot.exe     # 这一版的实际文件
-├─ current.txt               # 当前指向 0.1.0
+├─ app\0.1.1\mascot.exe     # 这一版的实际文件（同目录还有 _internal\）
+├─ current.txt               # 当前指向 0.1.1
 └─ rollback.bat              # 升级失败时双击回滚
 ```
 

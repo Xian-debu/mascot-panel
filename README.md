@@ -39,8 +39,8 @@
 
 ### 方式一：下载 Release（推荐）
 
-1. 到 [Releases](../../releases) 下载最新 `mascot-0.1.0.exe`（单文件，无需安装 Python）。
-2. 双击运行。首次启动会在 `%LOCALAPPDATA%\mascot` 下建状态目录，并弹出面板。
+1. 到 [Releases](../../releases) 下载最新 `mascot-0.1.1-win64.zip`，解压到任意目录（不是单文件：exe 必须和同目录的 `_internal` 一起用）。
+2. 双击 `mascot.exe` 运行。首次启动会在 `%LOCALAPPDATA%\mascot` 下建状态目录，并弹出面板。
 3. 打开面板右上齿轮 → 填 API Key → 保存；或事先设置环境变量 `DEEPSEEK_AUTH_TOKEN`。
 4. 想开机自启：`mascot.exe autostart on`（卸载/关闭用 `autostart off`）。
 
@@ -58,10 +58,10 @@ uv run mascot run --provider deepseek   # 前台启动，Ctrl+C 退出
 要求：Windows 10/11、Python 3.11+、已安装 **Microsoft Edge WebView2 Runtime**（Win11 一般自带）。
 非 Windows 可跑静态检查与纯逻辑，但 GUI 层（`src/mascot_win`）尚未移植。
 
-### 打包成单文件 exe
+### 自己打包（PyInstaller onedir）
 
 ```bash
-bash scripts/build-win.sh      # 产物 C:/Users/Public/mascot/dist/mascot/mascot.exe
+bash scripts/build-win.sh      # 产物 C:/Users/Public/mascot/dist/mascot/（mascot.exe + _internal/）
 bash scripts/install-win.sh    # 装到 %LOCALAPPDATA%\mascot\app\<ver>，更新 current.txt
 ```
 
@@ -114,6 +114,8 @@ Microsoft Edge WebView2 Runtime；前端内置 KaTeX 0.16.11（MIT）；构建�
 9. 高 DPI 只在 150% 下做过真机验证；其它缩放比例可能出现像素对齐瑕疵。
 10. 多会话/备忘搜索是线性扫描，上限 200 会话 / 500 备忘，数据量大时首屏会变慢。
 11. 面板固定尺寸（488×634 物理像素），不可拉伸；多显示器 + 混合 DPI 未验证。
+12. **0.1.1 之前有过「双击没反应」**：工作线程异常后进程变成没有界面的僵尸、占着单实例互斥体。
+    0.1.1 起会自检并退出/接管（详见 `docs/61-singleton-recovery.md`）；旧版遇到时在任务管理器结束 `mascot.exe` 再启动即可。
 
 ## 后续改进方向
 
