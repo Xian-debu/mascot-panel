@@ -2052,7 +2052,45 @@ class Runtime:
 
     # ---- 工作线程 -----------------------------------------------------------
 
+    def _check_windows_health(self) -> None:
+        """窗口资源自检：小球/面板的窗口句柄必须仍然活着。"""
+        from mascot_win import win32
+
+        ball = self._ball
+        if ball is not None and ball.hwnd and not win32.is_window(ball.hwnd):
+            log.error("health: 小球窗口已失效（hwnd=%s）", ball.hwnd)
+            self._fatal_exit("小球窗口丢失")
+        if self._panel_shown and self._panel_hwnd and not win32.is_window(self._panel_hwnd):
+            log.error("health: 面板窗口已失效（hwnd=%s）", self._panel_hwnd)
+            self._fatal_exit("面板窗口丢失")
+
+    def _fatal_exit(self, reason: str) -> None:
+        """不可恢复的内部故障：落日志 + 拆掉托盘/小球 + 退出进程。
+
+        退出是刻意的：只有进程退出，命名互斥体才会释放，下一次启动才能接管。
+        2026-10-25 的僵尸实例就是工作线程静默死掉、面板还藏着、互斥体一直被占，
+        导致之后每次双击都无反应（cli 走 ALREADY_RUNNING 分支静默 exit 3）。
+        """
+        log.critical("fatal: %s —— 退出进程以便下次启动接管", reason)
+        with contextlib.suppress(Exception):
+            if self._tray is not None:
+                self._tray.destroy()
+                self._tray = None
+            ball = self._ball
+            if ball is not None:
+                ball.destroy()
+            self._ball = None
+        os._exit(1)
+
     def _worker(self) -> None:
+        """工作线程入口：任何未捕获异常都必须变成"退出"，而不是留下僵尸进程。"""
+        try:
+            self._worker_loop()
+        except BaseException as exc:  # noqa: BLE001 - 线程崩了必须让进程也退
+            log.exception("worker: 工作线程异常退出（%s）", exc)
+            self._fatal_exit(f"worker: {exc}")
+
+    def _worker_loop(self) -> None:
         from mascot_win import win32
         from mascot_win.layered import LayeredWindow
         from mascot_win.tracker import PetTracker
@@ -2094,6 +2132,7 @@ class Runtime:
         next_frame = 0.0
         last_state_write = 0.0
         last_config_check = 0.0
+        last_health_check = 0.0
 
         try:
             while not self._stop.is_set():
@@ -2144,6 +2183,12 @@ class Runtime:
                 if now - last_state_write >= 1.0:
                     last_state_write = now
                     self._write_state()
+
+                # 每 5 秒自检一次窗口资源：窗口被外部销毁/丢失时宁可退出重启，
+                # 也不能留一个没有界面却占着单实例互斥体的僵尸进程。
+                if now - last_health_check >= 5.0:
+                    last_health_check = now
+                    self._check_windows_health()
 
                 time.sleep(0.005)
         finally:

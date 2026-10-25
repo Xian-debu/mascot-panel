@@ -137,6 +137,10 @@ def _declare_64bit_safe_prototypes() -> None:
     u.SetWindowRgn.restype = ctypes.c_int
     u.GetDpiForWindow.argtypes = [wt.HWND]
     u.GetDpiForWindow.restype = wt.UINT
+    u.IsWindow.argtypes = [wt.HWND]
+    u.IsWindow.restype = wt.BOOL
+    u.IsHungAppWindow.argtypes = [wt.HWND]
+    u.IsHungAppWindow.restype = wt.BOOL
     g.CreateRoundRectRgn.argtypes = [
         ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
     ]
@@ -379,6 +383,18 @@ def get_process_name(hwnd: int) -> str:
 def is_visible(hwnd: int) -> bool:
     _require_windows()
     return bool(_user32.IsWindowVisible(wt.HWND(hwnd)))
+
+
+def is_window(hwnd: int) -> bool:
+    """句柄是否仍是活着的窗口（窗口被销毁后旧句柄会失效）。"""
+    _require_windows()
+    return bool(_user32.IsWindow(wt.HWND(hwnd)))
+
+
+def is_hung(hwnd: int) -> bool:
+    """窗口是否超过 5 秒没处理消息（IsHungAppWindow）。"""
+    _require_windows()
+    return bool(_user32.IsHungAppWindow(wt.HWND(hwnd)))
 
 
 def enum_windows() -> list[int]:

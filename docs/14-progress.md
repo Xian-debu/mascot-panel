@@ -708,3 +708,12 @@ Windows: dist/mascot/mascot.exe doctor --offline        -> ok, rc 0
 
 - 透明四角露出 WinForms 灰底 → 用 SetWindowRgn 把面板窗口裁成圆角矩形（半径跟 tokens.RADIUS["r-panel"] 走，按 DPI 换算）。
 - 详见 docs/60-window-corners.md；DWM 系统圆角半径固定 8px、与 14px 对不上所以没采用。
+
+
+### M49 单实例僵尸与启动接管（2026-10-25，用户 m04234）
+
+- 双击安装版毫无反应的真因：工作线程静默死亡后托盘/小球被销毁、面板仍隐藏，进程活着占着命名互斥体，
+  新启动走 ALREADY_RUNNING 静默 exit 3。
+- 修复：worker 异常 → log.exception + _fatal_exit（os._exit(1)，释放互斥体）；每 5 秒窗口资源自检；
+  启动时区分「健康实例（发 to_panel 唤出面板）」与「僵尸（结束并接管）」；无控制台失败弹 MessageBox。
+- 详见 docs/61-singleton-recovery.md。版本 0.1.1。

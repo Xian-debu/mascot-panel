@@ -4,7 +4,7 @@
 set -euo pipefail
 
 WIN_ROOT=${WIN_ROOT:-/mnt/c/Users/Public/mascot}
-VERSION=${VERSION:-0.1.0}
+VERSION=${VERSION:-0.1.1}
 PY="$WIN_ROOT/venv/Scripts/python.exe"
 LOCAL_WIN="$("$PY" -c 'import os,sys;sys.stdout.write(os.environ["LOCALAPPDATA"])')"
 LOCAL="$(wslpath -u "$LOCAL_WIN")/mascot"

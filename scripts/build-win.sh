@@ -8,7 +8,7 @@
 set -euo pipefail
 
 WIN_ROOT=${WIN_ROOT:-/mnt/c/Users/Public/mascot}
-VERSION=${VERSION:-0.1.0}
+VERSION=${VERSION:-0.1.1}
 APP_DIR="$WIN_ROOT/app/$VERSION"
 DIST_DIR="$WIN_ROOT/dist"
 BUILD_DIR="$WIN_ROOT/build"

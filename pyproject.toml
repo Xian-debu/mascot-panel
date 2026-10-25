@@ -1,6 +1,6 @@
 [project]
 name = "mascot"
-version = "0.1.0"
+version = "0.1.1"
 description = "天选姬桌宠跟随框 + 环绕球（重构版）"
 readme = "README.md"
 requires-python = ">=3.11"

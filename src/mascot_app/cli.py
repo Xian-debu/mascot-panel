@@ -12,6 +12,7 @@ import argparse
 import contextlib
 import importlib.util
 import json
+import logging
 import os
 import platform
 import subprocess
@@ -25,6 +26,8 @@ from mascot_app.providers import make_provider
 from mascot_core import configfile, update, versions
 from mascot_core.config import HOT_FIELDS, Settings, default_config_path, load_settings
 from mascot_core.paths import state_dir
+
+log = logging.getLogger("mascot_app.cli")
 
 EXIT_OK = 0
 EXIT_ARGS = 2
@@ -152,10 +155,45 @@ def cmd_run(args: argparse.Namespace) -> int:
     win32.enable_dpi_awareness()
     instance = SingleInstance()
     try:
-        if not instance.acquire():
-            return _fail("ALREADY_RUNNING", "已有 mascot 实例在运行（命名互斥体）", EXIT_ENV)
+        acquired = instance.acquire()
     except Exception as exc:  # noqa: BLE001
         return _fail("ENV_UNSUPPORTED", f"无法创建单实例互斥体: {exc}", EXIT_ENV)
+
+    if not acquired:
+        # 互斥体被占：先判断占着它的老实例是真在跑，还是丢了窗口的僵尸。
+        # 2026-10-25 事故：工作线程异常退出后小球/托盘被销毁、面板仍隐藏，
+        # 进程活着、互斥体还在 → 之后每次双击都静默 exit 3，用户以为程序坏了。
+        health = _instance_health(_running_pid())
+        pid = int(health["pid"])
+        if health["windows"] and not health["hung"]:
+            # 老实例健康：把面板叫出来（等同 ctl to-panel），再按原语义退出 3
+            _send_control("to_panel")
+            log.info("already_running: pid=%s 已唤出面板", pid)
+            return _fail(
+                "ALREADY_RUNNING",
+                "已有 mascot 实例在运行，已唤出它的面板",
+                EXIT_ENV,
+                {"pid": pid, "activated": True},
+            )
+        # 僵尸：进程在但没有可见窗口 / 窗口卡死 → 结束它再接管
+        log.warning("zombie: pid=%s 无可见窗口（windows=%s hung=%s），结束它并接管", pid, len(health["windows"]), health["hung"])
+        killed = _terminate_stale(pid)
+        log.warning("zombie: 结束%s，重新抢互斥体", "成功" if killed else "失败（可能已自行退出）")
+        for _ in range(50):
+            try:
+                if instance.acquire():
+                    break
+            except Exception:  # noqa: BLE001
+                pass
+            time.sleep(0.1)
+        else:
+            _gui_notice("天选姬已经在运行，但它没有响应。请在任务管理器里结束 mascot.exe 后再试。")
+            return _fail(
+                "ALREADY_RUNNING",
+                "已有 mascot 实例在运行且无法接管（请手动结束 mascot.exe）",
+                EXIT_ENV,
+                {"pid": pid, "takeover": False},
+            )
 
     provider = make_provider(settings)
     pinned = {
@@ -206,6 +244,67 @@ def _running_pid() -> int | None:
     except Exception:  # noqa: BLE001 - 进程已经没了
         return None
     return pid if "mascot" in cmdline else None
+
+
+def _visible_windows_of(pid: int) -> list[int]:
+    """该进程当前可见的顶层窗口（僵尸实例的窗口全隐藏 → 空列表）。"""
+    try:
+        from mascot_win import win32
+    except Exception:  # noqa: BLE001
+        return []
+    out: list[int] = []
+    for hwnd in win32.enum_windows():
+        try:
+            if win32.get_pid(hwnd) == pid and win32.is_visible(hwnd):
+                out.append(hwnd)
+        except Exception:  # noqa: BLE001 - 枚举期间窗口可能消失
+            continue
+    return out
+
+
+def _instance_health(pid: int | None) -> dict:
+    """已有实例的健康度：进程在、有可见窗口、窗口不卡死。"""
+    if pid is None:
+        return {"pid": 0, "alive": False, "windows": [], "hung": False}
+    windows = _visible_windows_of(pid)
+    hung = False
+    if windows:
+        try:
+            from mascot_win import win32
+
+            hung = any(win32.is_hung(h) for h in windows)
+        except Exception:  # noqa: BLE001
+            hung = False
+    return {"pid": pid, "alive": True, "windows": windows, "hung": hung}
+
+
+def _terminate_stale(pid: int) -> bool:
+    """结束无窗口/卡死的老实例（只杀我们自己 pid 文件指向的 mascot 进程）。"""
+    try:
+        import psutil
+
+        proc = psutil.Process(pid)
+        proc.terminate()
+        try:
+            proc.wait(timeout=3.0)
+        except psutil.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=3.0)
+        return True
+    except Exception:  # noqa: BLE001 - 进程可能刚好自己退了
+        return False
+
+
+def _gui_notice(text: str) -> None:
+    """无控制台启动（双击 exe）时，把失败原因显示给用户，而不是静默退出。"""
+    if sys.stdout is not None:
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(None, text, "天选姬", 0x00000040)  # type: ignore[attr-defined]
+    except Exception:  # noqa: BLE001
+        return
 
 
 def _read_state_json() -> dict | None:

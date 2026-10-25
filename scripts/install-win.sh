@@ -9,7 +9,7 @@
 set -euo pipefail
 
 WIN_ROOT=${WIN_ROOT:-/mnt/c/Users/Public/mascot}
-VERSION=${VERSION:-0.1.0}
+VERSION=${VERSION:-0.1.1}
 PY="$WIN_ROOT/venv/Scripts/python.exe"
 SRC="$WIN_ROOT/dist/mascot"
 
